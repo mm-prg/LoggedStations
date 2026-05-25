@@ -26,7 +26,7 @@
     getFreq();
     drawIcon();
     initMainPanel();
-    // pulsante nello spazio dei plugin, non più usato perché adesso si fa tutto con l'icona
+    // plugin area button, no longer used because everything is now done via the icon
     // addManageButton();
     checkServerCSVFiles();
     if (CHECK_FOR_UPDATES) {
@@ -111,7 +111,7 @@
   function performFmlistLog(btn, freq, pi, ps, sid, dist, itu) {
     const logMsg = `LoggedStations: ${ps || 'Station'} [${itu || ''}], PI: ${pi || '?'}, Dist: ${dist}km`;
     
-    if (!confirm(`Confermi l'invio del log a FMLIST?\n\nMessaggio: "${logMsg}"`)) {
+    if (!confirm(`Confirm sending the log to FMLIST?\n\nMessage: "${logMsg}"`)) {
         return;
     }
 
@@ -133,11 +133,11 @@
     })
     .then(response => response.json())
     .then(result => {
-        if (result.ok) sendToast('success', pluginName, "Log inviato a FMLIST con successo!");
-        else sendToast('error', pluginName, "Errore durante l'invio: " + (result.error || "Unknown"));
+        if (result.ok) sendToast('success', pluginName, "Log sent to FMLIST successfully!");
+        else sendToast('error', pluginName, "Error during submission: " + (result.error || "Unknown"));
     })
     .catch(err => {
-        sendToast('error', pluginName, "Errore di rete: " + err.message);
+        sendToast('error', pluginName, "Network error: " + err.message);
     })
     .finally(() => {
         btn.disabled = false;
@@ -197,7 +197,7 @@
     const freqContainer = document.getElementById("freq-container");
     if (!freqContainer) return;
 
-    // Cerca stazioni per la frequenza corrente e quelle vicine
+    // Search for stations on the current frequency and nearby ones
     // FM: +-50kHz, MW/LW: +-5kHz
     const isFM = f > 50;
     const range = isFM ? 0.05 : 0.005; // 50 kHz for FM, 5 kHz for others
@@ -252,7 +252,7 @@
       stationData.sort((a, b) => a.formatted.localeCompare(b.formatted));
     }
 
-    // Aggiorna l'elemento nella pagina principale
+    // Update the element on the main page
     const mainPanel = document.getElementById("logged-stations-main-panel");
     const qthLat = localStorage.getItem("qthLatitude") || "";
     const qthLon = localStorage.getItem("qthLongitude") || "";
@@ -330,7 +330,7 @@
 
             return `
             <div class="station-row" style="display:flex; align-items:center; gap:8px; margin-bottom: 4px; padding-bottom: 2px; border-bottom: 1px dotted #444;">
-                <div class="tune-action" data-freq="${item.freq}" style="font-size:12px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-grow:1;" title="Sintonizza ${item.freq} MHz">${cleanNote}</div>
+                <div class="tune-action" data-freq="${item.freq}" style="font-size:12px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-grow:1;" title="Tune to ${item.freq} MHz">${cleanNote}</div>
                 ${buttonsHtml}
             </div>`;
         }).join('');
@@ -385,7 +385,7 @@
                 if (window.socket && window.socket.readyState === WebSocket.OPEN) {
                     window.socket.send('T' + Math.round(tuneFreq * 1000));
                 } else {
-                    sendToast('error', pluginName, "Errore: WebSocket non connesso.");
+                    sendToast('error', pluginName, "Error: WebSocket not connected.");
                 }
             };
         });
@@ -396,8 +396,8 @@
 
     const rawNotes = stationData.map(d => d.formatted);
 
-    // crea un contenitore dedicato
-    // dove poi mettere l'icona
+    // create a dedicated container
+    // where the icon will be placed
     let pluginBox = document.getElementById("logged-stations-plugin-box");
     if (!pluginBox) {
       pluginBox = document.createElement("div");
@@ -413,31 +413,27 @@
       freqContainer.appendChild(pluginBox);
     }
 
-    // svuola il contenitore e quindi rimuove icona precedente
+    // clear the container and thus remove the previous icon
     pluginBox.innerHTML = "";
 
-    // Crea icona delle note
+    // Create notes icon
     const icon = document.createElement("i");
 
-    // posizione e stile dell'icona (prima era 18px)
+    // icon position and style (previously was 18px)
     icon.style.fontSize = "22px";
     icon.style.cursor = "pointer";
     icon.style.color = "var(--color-5)";
     icon.style.lineHeight = "1";
-    // vecchia versione
-    //icon.style.position = 'absolute';
-    //icon.style.fontSize = '18px';
-    //icon.style.opacity = '0.5';
 
-    // Controlla se ci sono stazioni per quella frequenza
+    // Check if there are stations for that frequency
     if (rawNotes && rawNotes.length > 0) {
-      // ✅ CI SONO NOTE
+      // ✅ NOTES FOUND
       icon.className = "fa-solid fa-radio";
       icon.style.opacity = "0.8";
       icon.title = Array.isArray(rawNotes) ? rawNotes.join("\n") : rawNotes;
       icon.onclick = () => openManager(f);
     } else {
-      // ❌ NESSUNA NOTA
+      // ❌ NO NOTES
       icon.className = "fa-solid fa-circle";
       icon.style.opacity = "0.5";
       icon.title = "No data for this frequency";
@@ -452,14 +448,14 @@
   // STATION MANAGER POPUP
   // ==============================
   function openManager() {
-    // se il popup è già aperto, lo chiude (permette di chiudere cliccando di nuovo sull'icona)
+    // if the popup is already open, close it (allows closing by clicking the icon again)
     const existingPopup = document.getElementById("LoggedStationsPopup");
     if (existingPopup) {
       closePopup();
       return;
     }
 
-    // conta totale delle stazioni
+    // total station count
     const totalRecords = Object.values(notesMap).reduce((sum, arr) => {
         const records = Array.isArray(arr) ? arr : [arr];
         return sum + records.length;
@@ -834,9 +830,9 @@
     serverFiles.forEach((f) => { if (f && f.name) names.add(f.name); });
     Object.keys(localStore).forEach((n) => names.add(n));
 
-    let html = "<h3>Dettagli File Caricati</h3>";
+    let html = "<h3>Uploaded Files Details</h3>";
     if (names.size === 0) {
-      html += "<p style='margin-top:10px;'>Nessun file caricato nel database locale o presente sul server.</p>";
+      html += "<p style='margin-top:10px;'>No file uploaded in the local database or present on the server.</p>";
     } else {
       html += '<ul style="list-style:none; padding:0; font-size:13px; margin-top:15px; border-top:1px solid #444;">';
       names.forEach((name) => {
@@ -845,12 +841,12 @@
         const serverMtime = serverObj && serverObj.mtimeMs ? serverObj.mtimeMs : null;
         const mtime = serverMtime || localMtime;
         const src = serverObj && serverObj.uploaded ? "server" : "local";
-        const date = mtime ? new Date(mtime).toLocaleString() : "data sconosciuta";
+        const date = mtime ? new Date(mtime).toLocaleString() : "unknown date";
         html += `<li style="padding: 10px 0; border-bottom: 1px solid #444;">
                   <div style="font-weight: bold; color: var(--color-5);">${name}</div>
                   <div style="font-size: 0.9em; color: #ccc; margin-top:4px;">
                     Data: ${date} <br>
-                    Origine: ${src}
+                    Origin: ${src}
                   </div>
                 </li>`;
       });
@@ -867,13 +863,13 @@
     let page = 0;
     const singleFreqMode = onlyFreq !== null;
 
-    // ottiene tutte le frequenze ordinate numericamente, applica filtro se in singleFreqMode
+    // get all frequencies sorted numerically, apply filter if in singleFreqMode
     function getFreqs() {
       let freqs = Object.keys(notesMap).sort(
         (a, b) => parseFloat(a) - parseFloat(b)
       );
 
-      // se siamo in singleFreqMode, filtriamo per frequenze vicine a onlyFreq (considerando tolleranza di 50 kHz per FM e 5 kHz per MW/LW)
+      // if in singleFreqMode, filter for frequencies near onlyFreq (allowing 50 kHz tolerance for FM and 5 kHz for MW/LW)
       if (singleFreqMode) {
         // FM: +-50kHz, MW/LW: +-5kHz
         const isFM = onlyFreq > 50;
@@ -887,7 +883,7 @@
       return freqs;
     }
 
-    // normalizza i record per una frequenza: se è un array, lo appiattisce, se è una stringa lo trasforma in array, se non ci sono dati restituisce un array con un messaggio di default
+    // normalize records for a frequency: flatten if array, transform string to array, return default if no data
     function normalizeRecords(freq) {
       if (!notesMap[freq] || notesMap[freq].length === 0) {
         return ["No data for this frequency"];
@@ -904,7 +900,7 @@
       return records.length ? records : ["No data for this frequency"];
     }
 
-    // renderizza la pagina corrente della tabella, con azioni e pulsanti di navigazione
+    // render the current page of the table, with actions and navigation buttons
     function renderPage() {
       const freqs = getFreqs();
       const totalPages = Math.max(1, Math.ceil(freqs.length / rowsPerPage));
@@ -971,7 +967,7 @@
                             
                             <button class="fmlist-log-btn" data-freq="${freq}" data-pi="${piCode}" data-ps="${name}" data-sid="${fmlistId}" data-dist="${qrb}" data-itu="${itu}" title="Automated log on fmlist.org">Log FMLIST</button>
 
-                            ${piCode ? `<a href="#"><button class="pi-search-btn" data-pi="${piCode}" data-freq="${freq}" title="Cerca Frequenze Alternative (AF)">AF</button></a>` : ''}
+                            ${piCode ? `<a href="#"><button class="pi-search-btn" data-pi="${piCode}" data-freq="${freq}" title="Search for Alternative Frequencies (AF)">AF</button></a>` : ''}
 
                         `
                             : ""
@@ -1143,7 +1139,7 @@
   }
 
   // ==============================
-  // TRASFORMA QTF IN DIREZIONE
+  // TRANSFORM QTF TO DIRECTION
   // ==============================
   function qtfToDirectionArrow(deg) {
     if (isNaN(deg)) return { dir: "", arrow: "" };
@@ -1164,7 +1160,7 @@
   // ==============================
   // Uploaded files tracking (localStorage)
   // ==============================
-  // keeps track of already imported CSV files, to avoid duplicates
+  // keeps track of already imported CSV files to avoid duplicates
   function loadUploadedStore() {
     try {
       return JSON.parse(
@@ -1175,7 +1171,7 @@
     }
   }
 
-  // salva lo stato dei file importati
+  // save the state of imported files
   function saveUploadedStore(store) {
     try {
       localStorage.setItem("LoggedStationsUploadedFiles", JSON.stringify(store));
@@ -1184,13 +1180,13 @@
     }
   }
 
-  // controlla se un file è già stato importato localmente
+  // check if a file has already been imported locally
   function isAlreadyUploadedLocal(name, mtimeMs) {
     const store = loadUploadedStore();
     return store[name] && store[name] === mtimeMs;
   }
 
-  // segna un file come importato
+  // mark a file as imported
   async function markFileUploaded(name, mtimeMs) {
     // save locally
     const store = loadUploadedStore();
@@ -1224,7 +1220,7 @@
     }
   }
 
-  // scarica un file CSV dal server e lo importa
+  // download a CSV file from the server and import it
   async function getServerFiles() {
     try {
       const res = await fetch("/plugins/LoggedStations/files");
@@ -1236,7 +1232,7 @@
     }
   }
 
-  // scarica e importa un file CSV dal server
+  // download and import a CSV file from the server
   function isAlreadyUploadedServer(serverList, name, mtimeMs) {
     if (!Array.isArray(serverList)) return false;
     const found = serverList.find(
@@ -1245,29 +1241,29 @@
     return !!found;
   }
 
-  // scarica e importa un file CSV dal server
+  // download and import a CSV file from the server
   function importFromCSV(csvText) {
     const lines = csvText.trim().split(/\r?\n/);
     let rowsProcessed = 0;
 
-    // cerca l'intestazione con MHz o kHz, per verificare che sia un CSV valido
+    // look for MHz or kHz header to verify valid CSV
     const headerLineIndex = lines.findIndex((line) => {
       const l = line.toLowerCase();
       return l.includes("mhz") || l.includes("khz");
     });
 
-    // se non trova khz o mhz, esce
+    // if khz or mhz not found, exit
     if (headerLineIndex === -1) {
       sendToast('error', pluginName, "CSV file does not contain MHz or kHz header.");
       return;
     }
 
-    // legge la linea delle intestazioni della tabella (con i nomi delle colonne)
+    // read the table header line (column names)
     const headers = lines[headerLineIndex]
       .split(";")
       .map((h) => h.trim().toLowerCase());
 
-    // mappa gli indici delle colonne rilevanti
+    // map relevant column indices
     const getIndex = (name) => headers.indexOf(name);
     const idxMHz = getIndex("mhz");
     const idxKHz = getIndex("khz");
@@ -1284,13 +1280,13 @@
     const idxPI = getIndex("pi");
     const idxDate = getIndex("date");
 
-    // verifica che ci sia almeno Program e MHz o kHz
+    // verify at least Program and MHz or kHz are present
     if (idxProgram === -1 || (idxMHz === -1 && idxKHz === -1)) {
       sendToast('error', pluginName, "CSV must contain Program and MHz or kHz columns.");
       return;
     }
 
-    // Chiede all'utente se vuole aggiungere o sostituire
+    // Ask the user whether to add or replace
     const addToExisting = isServerImport
       ? true
       : confirm(
@@ -1329,41 +1325,41 @@
       return { station, dateTs };
     }
 
-    // funzione locale: converte stringa frequenza in numero
-    // gestisce anche formati con spazi dopo i mhz e virgole come separatore decimale
+    // local function: convert frequency string to number
+    // handles formats with spaces after mhz and commas as decimal separator
     function parseFrequency(value) {
       if (!value) return NaN;
       let str = value
         .toString()
-        .replace(/mhz|khz/gi, "") // rimuove unità
-        .replace(/\s+/g, "") // rimuove tutti gli spazi
-        .replace(",", "."); // converte la virgola in punto
+        .replace(/mhz|khz/gi, "") // remove units
+        .replace(/\s+/g, "") // remove all spaces
+        .replace(",", "."); // convert comma to dot
       const freq = parseFloat(str);
       return isNaN(freq) ? NaN : freq;
     }
 
-    // processa le righe successive all'intestazione, che contengono i dati
+    // process the rows following the header containing data
     lines.slice(headerLineIndex + 1).forEach((line) => {
-      // salta righe vuote
+      // skip empty rows
       if (!line.trim()) return;
       rowsProcessed++;
 
-      // divide la riga in colonne
+      // split row into columns
       const cols = line.split(";");
 
-      // legge la frequenza
+      // read frequency
       let freq = parseFrequency(cols[isKHz ? idxKHz : idxMHz]);
-      // salta se non è un numero valido
+      // skip if not a valid number
       if (isNaN(freq)) return;
 
-      // converte in MHz se necessario
+      // convert to MHz if necessary
       if (isKHz) freq = freq / 1000;
 
       const noteParts = [];
 
-      // Frequenza + programma
+      // Frequency + program
       let firstPart = `${freq.toFixed(3)}`;
-      if (idxProgram !== -1) firstPart += ` ${cols[idxProgram]?.trim()}`; // solo spazio
+      if (idxProgram !== -1) firstPart += ` ${cols[idxProgram]?.trim()}`; // space only
       noteParts.push(firstPart);
 
       // ITU
@@ -1396,18 +1392,18 @@
 
       if (locRegQtfKw) noteParts.push(locRegQtfKw);
 
-      // unisce le parti della nota aggiungendo " – " come separatore
+      // join note parts using " – " as separator
       const finalNote = noteParts.filter(Boolean).join(" – ");
-      // usa il campo "Date" della riga se presente; se non presente non aggiunge nulla
+      // use "Date" field if present; otherwise add nothing
       let finalNoteWithDate = finalNote;
       if (idxDate !== -1 && cols[idxDate] && cols[idxDate].trim()) {
         finalNoteWithDate = `${finalNote} (${cols[idxDate].trim()})`;
       }
 
-      // Chiave sempre 3 decimali
+      // Key always 3 decimals
       const freqKey = freq.toFixed(3);
 
-      // aggiunge la nota (con metadata)
+      // add the note (with metadata)
       if (!newNotes[freqKey]) newNotes[freqKey] = [];
       const stationName =
         (idxProgram !== -1 ? cols[idxProgram]?.trim() || "" : "") ||
@@ -1423,7 +1419,7 @@
       });
     });
 
-    // Deduplica i record importati: per ogni freq+station scegli la riga con date più recente
+    // De-duplicate imported records: for each freq+station pick the most recent date
     const selectedNotes = {};
     for (const freq in newNotes) {
       const entries = newNotes[freq];
@@ -1433,16 +1429,16 @@
         if (!byStation[key]) byStation[key] = ent;
         else {
           const a = byStation[key];
-          // preferisci ent con date più recenti
+          // prefer entries with more recent dates
           if ((ent.dateTs || 0) > (a.dateTs || 0)) byStation[key] = ent;
         }
       });
       selectedNotes[freq] = Object.values(byStation).map((e) => e.note);
     }
 
-    // unisce o sostituisce le note esistenti
+    // merge or replace existing notes
     if (addToExisting) {
-      // unisce con notesMap esistente ma evita duplicati per station+freq
+      // merge with existing notesMap avoiding station+freq duplicates
       for (const freq in selectedNotes) {
         if (!notesMap[freq]) notesMap[freq] = [];
         const existing = notesMap[freq];
@@ -1470,13 +1466,13 @@
         notesMap[freq] = merged;
       }
     } else {
-      // sostituisce completamente con i record selezionati
+      // completely replace with selected records
       const newMap = {};
       for (const freq in selectedNotes) newMap[freq] = selectedNotes[freq];
       notesMap = newMap;
     }
 
-    // statistiche import
+    // import statistics
     const freqCount = Object.keys(newNotes).length;
     const recordCount = Object.values(newNotes).reduce(
       (s, arr) => s + (Array.isArray(arr) ? arr.length : 0),
@@ -1513,10 +1509,10 @@
     function tryAdd() {
       attempts++;
 
-      // evita duplicati
+      // avoid duplicates
       if (document.getElementById(BTN_ID)) return;
 
-      // funzione plugin non ancora pronta
+      // plugin function not ready yet
       if (typeof window.addIconToPluginPanel !== "function") {
         if (attempts < MAX_RETRIES) {
           setTimeout(tryAdd, RETRY_DELAY);
@@ -1528,7 +1524,7 @@
         return;
       }
 
-      // crea bottone
+      // create button
       window.addIconToPluginPanel(
         BTN_ID,
         "Logged Stations",
@@ -1553,7 +1549,7 @@
   }
 
   // ==============================
-  // CONTROLLA SE CI SONO BANDSCAN SUL SERVER
+  // CHECK SERVER FOR BANDSCAN FILES
   // ==============================
   async function checkServerCSVFiles() {
     try {
@@ -1563,7 +1559,7 @@
       const csvFiles = await response.json();
       if (!Array.isArray(csvFiles) || csvFiles.length === 0) return;
 
-      // prima di scaricare, se non ci sono record locali svuota i marker per permettere re-import
+      // before downloading, if no local records exist, clear markers to allow re-import
       if (Object.keys(notesMap).length === 0) {
         try {
           const localStore = loadUploadedStore();
@@ -1572,9 +1568,9 @@
             console.log(
               `[${pluginName}] No local records found — clearing uploaded markers (${localNames.length} local)`
             );
-            // cancella store locale
+            // clear local store
             saveUploadedStore({});
-            // notifica server per i file marcati
+            // notify server for marked files
             for (const f of csvFiles) {
               if (f && (f.uploaded || localNames.includes(f.name))) {
                 try {
@@ -1608,14 +1604,14 @@
         }
       }
 
-      // ⚠️ segnala che l'import viene dal server
+      // ⚠️ flag that import is from server
       isServerImport = true;
 
       for (const fileObj of csvFiles) {
         const name = fileObj && fileObj.name ? fileObj.name : fileObj;
         const mtime = fileObj && fileObj.mtimeMs ? fileObj.mtimeMs : null;
 
-        // se il server ha già segnato il file come 'uploaded' salta (log)
+        // if server already marked file as 'uploaded', skip (log)
         if (fileObj && fileObj.uploaded && mtime) {
           console.log(
             `[${pluginName}] Server file marked uploaded, skipping: ${name} (mtime:${mtime})`
@@ -1623,7 +1619,7 @@
           continue;
         }
 
-        // salta se già importato localmente (stesso nome+data) e logga
+        // skip if already imported locally (same name+date) and log
         if (isAlreadyUploadedLocal(name, mtime)) {
           console.log(
             `[${pluginName}] Skipping server file ${name} because already imported locally (mtime:${mtime})`
@@ -1642,9 +1638,9 @@
   }
 
   // ==============================
-  // SCARICA I DATI DAL SERVER
+  // DOWNLOAD DATA FROM SERVER
   // ==============================
-  // funzione per scaricare ed importare un CSV usando importFromCSV
+  // function to download and import a CSV using importFromCSV
   function downloadCSVFile(fileName, mtime = null) {
     fetch(`/plugins/LoggedStations/files/${encodeURIComponent(fileName)}`)
       .then((response) => {
@@ -1653,9 +1649,9 @@
       })
       .then((csvText) => {
         console.log(`[${pluginName}] Downloaded CSV file: ${fileName}`);
-        isServerImport = true; // flag per import server
+        isServerImport = true; // server import flag
         importFromCSV(csvText);
-        // marca come importato localmente e notifica il server
+        // mark as imported locally and notify server
         markFileUploaded(fileName, mtime || Date.now());
         isServerImport = false; // reset
       })
@@ -1670,7 +1666,7 @@
   // POPUP HANDLING
   // ==============================
   function showPopup(html) {
-    // crea un backdrop per chiudere il popup cliccando all'esterno
+    // create a backdrop to close the popup by clicking outside
     const backdrop = document.createElement("div");
     backdrop.id = "LoggedStationsBackdrop";
     backdrop.style.position = "fixed";
@@ -1693,9 +1689,9 @@
     popup.style.color = "#fff";
     popup.style.zIndex = 9999;
     popup.style.borderRadius = "8px";
-    popup.style.width = "70%"; // allargato al 70% della finestra
-    popup.style.maxWidth = "1200px"; // limite massimo
-    popup.style.maxHeight = "85vh"; // altezza massima
+    popup.style.width = "70%"; // widened to 70% of the window
+    popup.style.maxWidth = "1200px"; // maximum limit
+    popup.style.maxHeight = "85vh"; // maximum height
     popup.style.display = "flex";
     popup.style.flexDirection = "column";
     popup.style.boxShadow = "0 0 15px rgba(0,0,0,0.6)";
@@ -1790,7 +1786,7 @@
     const content = `
         ${html}
         <br>
-        <button onclick="document.getElementById('LoggedStationsSecondPopup').remove()" style="padding:4px 8px; font-size:12px; margin-top: 10px;">Chiudi</button>`;
+        <button onclick="document.getElementById('LoggedStationsSecondPopup').remove()" style="padding:4px 8px; font-size:12px; margin-top: 10px;">Close</button>`;
     popup.innerHTML = content;
     document.body.appendChild(popup);
 

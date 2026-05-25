@@ -9,7 +9,7 @@ const path = require('path');
 const express = require('express');
 const https = require('https');
 const config = require('../../config.json');
-const endpointsRouter = require('../../server/endpoints'); // come nel tuo plugin
+const endpointsRouter = require('../../server/endpoints'); // as in your plugin
 const { logInfo, logError } = require('../../server/console');
 
 // TextDecoder helper: use global if available, otherwise try util.TextDecoder
@@ -49,7 +49,7 @@ function saveUploadedStore(store) {
 }
 
 // ==============================
-// Endpoint per la lista dei file
+// File list endpoint
 // ==============================
 endpointsRouter.get('/plugins/LoggedStations/files', (req, res) => {
     try {
@@ -85,7 +85,7 @@ endpointsRouter.get('/plugins/LoggedStations/files', (req, res) => {
 });
 
 // ==============================
-// Endpoint per scaricare un file CSV
+// CSV file download endpoint
 // ==============================
 endpointsRouter.get('/plugins/LoggedStations/files/:filename', (req, res) => {
     const fileName = req.params.filename;
@@ -102,7 +102,7 @@ endpointsRouter.get('/plugins/LoggedStations/files/:filename', (req, res) => {
             }
         }
 
-        // Decodifica buffer: prova windows-1252 (ANSI), fallback utf-8
+        // Buffer decoding: try windows-1252 (ANSI), fallback utf-8
         let data;
         if (TextDecoderImpl) {
             try {
@@ -115,7 +115,7 @@ endpointsRouter.get('/plugins/LoggedStations/files/:filename', (req, res) => {
             data = buffer.toString('utf8');
         }
 
-        // Conta righe CSV
+        // Count CSV lines
         const lineCount = data.split(/\r?\n/).length;
         logInfo(`[${pluginName}] Served CSV file: ${fileName} (${lineCount} lines)`);
 
@@ -124,7 +124,7 @@ endpointsRouter.get('/plugins/LoggedStations/files/:filename', (req, res) => {
     });
 });
 
-// Endpoint per marcare un file come caricato (client chiama dopo averlo importato)
+// Endpoint to mark file as uploaded (client calls after import)
 endpointsRouter.post('/plugins/LoggedStations/files/:filename/markUploaded', express.json(), (req, res) => {
     const fileName = req.params.filename;
     const filePath = path.join(csvDirectory, fileName);
@@ -143,7 +143,7 @@ endpointsRouter.post('/plugins/LoggedStations/files/:filename/markUploaded', exp
     }
 });
 
-// Endpoint per rimuovere la marcatura 'uploaded' di un file (client può forzare re-import)
+// Endpoint to remove the 'uploaded' mark (client can force re-import)
 endpointsRouter.post('/plugins/LoggedStations/files/:filename/unmarkUploaded', express.json(), (req, res) => {
     const fileName = req.params.filename;
     try {
@@ -163,7 +163,7 @@ endpointsRouter.post('/plugins/LoggedStations/files/:filename/unmarkUploaded', e
 });
 
 // ==============================
-// Endpoint per il log su FMLIST
+// FMLIST log endpoint
 // ==============================
 endpointsRouter.post('/plugins/LoggedStations/fmlistLog', express.json(), (req, res) => {
     const data = req.body;
@@ -177,18 +177,18 @@ endpointsRouter.post('/plugins/LoggedStations/fmlistLog', express.json(), (req, 
     const freq = parseFloat(data.freq).toFixed(2);
     const distance = parseFloat(data.distance);
     
-    // Determinazione tipo propagazione (come in scanner_server.js)
+    // Determine propagation type (as in scanner_server.js)
     const type = distance < 900 ? 'Tropo' : 'Sporadic-E';
     const shortServerName = config.identification.tunerName.split(' ')[0];
 
-    // Preparazione pacchetto dati per FMLIST
+    // Prepare data packet for FMLIST
     const postData = JSON.stringify({
         station: {
             freq: parseFloat(freq),
             pi: data.pi || "",
             id: data.stationid || "",
             rds_ps: (data.ps || "").replace(/'/g, "\\'"),
-            signal: 40, // Valore di default in dBµV non essendoci segnale reale nel log statico
+            signal: 40, // Default value in dBµV since there is no real signal in the static log
             tp: 0,
             ta: 0,
             af_list: []
