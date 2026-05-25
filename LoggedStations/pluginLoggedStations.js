@@ -9,7 +9,7 @@
   // GLOBAL VARIABLES
   // ==============================
   const pluginName = "LoggedStations";
-  const pluginVersion = "0.0.1";
+  const pluginVersion = "0.0.2";
   let notesMap = JSON.parse(localStorage.getItem("LoggedStationsMap") || localStorage.getItem("BandscanLogMap") || "{}");
   let freq = null;
   let isServerImport = false;
@@ -28,7 +28,15 @@
     initMainPanel();
     // plugin area button, no longer used because everything is now done via the icon
     // addManageButton();
-    checkServerCSVFiles();
+    const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
+    if (behavior === "server") {
+        checkServerCSVFiles();
+    } else if (behavior === "remote") {
+        const savedUrl = localStorage.getItem("LoggedStationsRemoteUrl");
+        if (savedUrl) {
+            importFromGitHub(savedUrl, true);
+        }
+    }
     if (CHECK_FOR_UPDATES) {
         checkUpdate(pluginSetupOnlyNotify, pluginName, pluginHomepageUrl, pluginUpdateUrl);
     }
@@ -258,7 +266,7 @@
     const qthLon = localStorage.getItem("qthLongitude") || "";
 
     if (mainPanel) {
-      if (stationData.length > 0) {
+      if (f !== null && !isNaN(f)) {
         mainPanel.style.display = "block";
 
         const isFMCurrent = f > 50;
@@ -285,19 +293,28 @@
         const header = `
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:5px;">
                 <div style="display:flex; align-items:center; font-weight: bold; font-size:11px; color: var(--color-5); white-space:nowrap; position:relative;">
-                    <i class="fa-solid fa-bars" id="ls-menu-btn" style="cursor:pointer; margin-right:8px; padding: 2px 5px;" title="Plugin Menu"></i>
+                    <i class="fa-solid fa-bars" id="ls-menu-btn" style="cursor:pointer; margin-right:4px; padding: 2px 5px;" title="Data Import/Export"></i>
                     <div id="ls-dropdown-menu" style="display:none; position:absolute; top:22px; left:0; background: #2a2a2a; border:1px solid #555; border-radius:4px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.5); min-width:170px; padding:4px 0;">
                         <div class="ls-dropdown-item" data-action="import-csv" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px; border-bottom:1px solid #444;">⬆ Import CSV</div>
+                        <div class="ls-dropdown-item" data-action="import-remote" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px; border-bottom:1px solid #444;">🌐 Import from GitHub</div>
                         <div class="ls-dropdown-item" data-action="export-json" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px; border-bottom:1px solid #444;">⬇ Export JSON</div>
-                        <div class="ls-dropdown-item" data-action="show-data" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px; border-bottom:1px solid #444;">📊 Show All Data</div>
                         <div class="ls-dropdown-item" data-action="info" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px;">ℹ️ Info</div>
                     </div>
+
+                    <i class="fa-solid fa-gear" id="ls-settings-btn" style="cursor:pointer; margin-right:8px; padding: 2px 5px;" title="Plugin Settings"></i>
+                    <div id="ls-settings-menu" style="display:none; position:absolute; top:22px; left:25px; background: #2a2a2a; border:1px solid #555; border-radius:4px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.5); min-width:170px; padding:4px 0;">
+                        <div class="ls-dropdown-item" data-action="show-data" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px; border-bottom:1px solid #444;">📊 Show All Data</div>
+                        <div class="ls-dropdown-item" data-action="startup-settings" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px;">⚙️ Startup Settings</div>
+                    </div>
+
                     ${pluginName} v${pluginVersion} <span style="color:#888; margin-left:8px;">${f.toFixed(3)} MHz</span>
                 </div>
                 ${toolbarHtml}
             </div>`;
 
-        const list = stationData.map((item, idx) => {
+        let list = "";
+        if (stationData.length > 0) {
+            list = stationData.map((item, idx) => {
             const cleanNote = item.formatted.replace(/\u00A0/g, ' ');
             const meta = extractMetadata(item.record);
             const freqNum = parseFloat(item.freq);
@@ -334,11 +351,17 @@
                 ${buttonsHtml}
             </div>`;
         }).join('');
+        } else {
+            list = `<div style="padding:10px; color:#888; text-align:center; font-style:italic;">No logged stations for this frequency.</div>`;
+        }
+
         mainPanel.innerHTML = header + list;
 
         // Attach events
         const menuBtn = mainPanel.querySelector('#ls-menu-btn');
         const dropdown = mainPanel.querySelector('#ls-dropdown-menu');
+        const settingsBtn = mainPanel.querySelector('#ls-settings-btn');
+        const settingsMenu = mainPanel.querySelector('#ls-settings-menu');
 
         menuBtn.onclick = (e) => {
             e.stopPropagation();
@@ -351,20 +374,35 @@
             }
         };
 
-        dropdown.querySelectorAll('.ls-dropdown-item').forEach(item => {
+        settingsBtn.onclick = (e) => {
+            e.stopPropagation();
+            const isVisible = settingsMenu.style.display === 'block';
+            settingsMenu.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                const closeSettings = () => { settingsMenu.style.display = 'none'; document.removeEventListener('click', closeSettings); };
+                document.addEventListener('click', closeSettings);
+            }
+        };
+
+        mainPanel.querySelectorAll('.ls-dropdown-item').forEach(item => {
             item.onmouseover = () => item.style.backgroundColor = '#444';
             item.onmouseout = () => item.style.backgroundColor = 'transparent';
             item.onclick = (e) => {
                 e.stopPropagation();
                 dropdown.style.display = 'none';
+                settingsMenu.style.display = 'none';
                 const action = item.dataset.action;
                 if (action === 'import-csv') { openManager(); setTimeout(() => document.getElementById('importCsvBtn')?.click(), 100); }
+                else if (action === 'import-remote') { importFromGitHub(); }
                 else if (action === 'export-json') { exportDatabaseJson(); } 
                 else if (action === 'show-data') { openManager(); setTimeout(() => document.getElementById('showTableBtn')?.click(), 100); }
+                else if (action === 'startup-settings') { showStartupSettings(); }
                 else if (action === 'info') { showUploadedFileInfo(); }
             };
         });
 
+        if (stationData.length > 0) {
         mainPanel.querySelectorAll('.log-action').forEach(btn => {
             btn.onclick = () => {
                 const item = stationData[btn.dataset.idx];
@@ -389,6 +427,7 @@
                 }
             };
         });
+        }
       } else {
         mainPanel.style.display = "none";
       }
@@ -586,12 +625,14 @@
 
       const serverFiles = await getServerFiles();
       const localStore = loadUploadedStore();
+      const remoteStore = JSON.parse(localStorage.getItem("LoggedStationsRemoteFiles") || "{}");
 
       const names = new Set();
       serverFiles.forEach((f) => {
         if (f && f.name) names.add(f.name);
       });
       Object.keys(localStore).forEach((n) => names.add(n));
+      Object.keys(remoteStore).forEach((n) => names.add(n));
 
       if (names.size === 0) {
         info.textContent = "(uploaded files: none)";
@@ -603,11 +644,16 @@
 
       names.forEach((name) => {
         const serverObj = serverFiles.find((f) => f && f.name === name);
+        const remoteObj = remoteStore[name];
         const localMtime = localStore[name] || null;
         const serverMtime =
           serverObj && serverObj.mtimeMs ? serverObj.mtimeMs : null;
-        const mtime = serverMtime || localMtime;
-        const src = serverObj && serverObj.uploaded ? "server" : "local";
+        const mtime = serverMtime || localMtime || (remoteObj ? remoteObj.mtimeMs : null);
+        
+        let src = "local";
+        if (serverObj && serverObj.uploaded) src = "server";
+        else if (remoteObj) src = "remote";
+
         const date = mtime ? new Date(mtime).toLocaleDateString() : "unknown";
 
         displayNames.push(name);
@@ -825,12 +871,26 @@
   async function showUploadedFileInfo() {
     const serverFiles = await getServerFiles();
     const localStore = loadUploadedStore();
+    const remoteStore = JSON.parse(localStorage.getItem("LoggedStationsRemoteFiles") || "{}");
 
     const names = new Set();
     serverFiles.forEach((f) => { if (f && f.name) names.add(f.name); });
     Object.keys(localStore).forEach((n) => names.add(n));
+    Object.keys(remoteStore).forEach((n) => names.add(n));
 
-    let html = "<h3>Uploaded Files Details</h3>";
+    const totalFreqs = Object.keys(notesMap).length;
+    const totalRecords = Object.values(notesMap).reduce((sum, arr) => {
+        const records = Array.isArray(arr) ? arr : [arr];
+        return sum + records.length;
+    }, 0);
+
+    let html = `<h3>Database Statistics</h3>
+                <div style="margin-bottom:15px; padding:10px; background:rgba(255,255,255,0.05); border-radius:4px; border-left:3px solid var(--color-5);">
+                  <strong>Total Frequencies:</strong> ${totalFreqs}<br>
+                  <strong>Total Stations:</strong> ${totalRecords}
+                </div>
+                <h3>Uploaded Files Details</h3>`;
+
     if (names.size === 0) {
       html += "<p style='margin-top:10px;'>No file uploaded in the local database or present on the server.</p>";
     } else {
@@ -839,8 +899,13 @@
         const serverObj = serverFiles.find((f) => f && f.name === name);
         const localMtime = localStore[name] || null;
         const serverMtime = serverObj && serverObj.mtimeMs ? serverObj.mtimeMs : null;
-        const mtime = serverMtime || localMtime;
-        const src = serverObj && serverObj.uploaded ? "server" : "local";
+        const remoteObj = remoteStore[name];
+        const mtime = serverMtime || localMtime || (remoteObj ? remoteObj.mtimeMs : null);
+        
+        let src = "local";
+        if (serverObj && serverObj.uploaded) src = "server";
+        else if (remoteObj) src = "remote (GitHub)";
+
         const date = mtime ? new Date(mtime).toLocaleString() : "unknown date";
         html += `<li style="padding: 10px 0; border-bottom: 1px solid #444;">
                   <div style="font-weight: bold; color: var(--color-5);">${name}</div>
@@ -1188,6 +1253,8 @@
 
   // mark a file as imported
   async function markFileUploaded(name, mtimeMs) {
+    const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
+    
     // save locally
     const store = loadUploadedStore();
     store[name] = mtimeMs;
@@ -1196,6 +1263,9 @@
     console.log(
       `[${pluginName}] Marked local uploaded: ${name} (mtime:${mtimeMs})`
     );
+
+    if (behavior !== "server") return;
+
     // notify server (best-effort)
     try {
       const res = await fetch(
@@ -1223,6 +1293,9 @@
   // download a CSV file from the server and import it
   async function getServerFiles() {
     try {
+      const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
+      if (behavior !== "server") return [];
+
       const res = await fetch("/plugins/LoggedStations/files");
       if (!res.ok) return [];
       const json = await res.json();
@@ -1486,6 +1559,157 @@
     sendToast('success', pluginName, `Imported ${freqCount} frequencies from CSV`, true);
     openManager();
   }
+
+  async function importFromGitHub(forcedUrl = null, isAutoStartup = false) {
+    const defaultRepoPath = "https://github.com/mm-prg/TefData/tree/main/LoggedStations";
+    let fullRepoPathInput;
+
+    if (forcedUrl) {
+        fullRepoPathInput = forcedUrl;
+    } else {
+        fullRepoPathInput = prompt("Inserisci il percorso del repository GitHub (es. 'utente/repo/path/to/folder' o URL completo):", localStorage.getItem("LoggedStationsRemoteUrl") || defaultRepoPath);
+    }
+
+    if (!fullRepoPathInput) {
+        if (!isAutoStartup) sendToast('info', pluginName, "Importazione da GitHub annullata.");
+        return;
+    }
+
+    // Salva l'ultimo URL usato
+    if (!forcedUrl) localStorage.setItem("LoggedStationsRemoteUrl", fullRepoPathInput);
+
+    let owner, repo, branch, contentPath;
+
+    // Tenta di parsare come un URL completo di GitHub
+    const githubUrlMatch = fullRepoPathInput.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/]+)\/([^\/]+)(?:\/tree\/([^\/]+))?\/?(.*)$/i);
+
+    if (githubUrlMatch) {
+        owner = githubUrlMatch[1];
+        repo = githubUrlMatch[2];
+        branch = githubUrlMatch[3];
+        contentPath = githubUrlMatch[4];
+    } else {
+        // Altrimenti, assume il formato 'owner/repo/path/to/folder'
+        const parts = fullRepoPathInput.split('/');
+        if (parts.length < 2) { // Almeno owner/repo
+            sendToast('error', pluginName, "Formato percorso GitHub non valido. Deve essere 'utente/repo/path/to/folder' o un URL completo.");
+            return;
+        }
+        owner = parts[0];
+        repo = parts[1];
+        contentPath = parts.slice(2).join('/');
+    }
+
+    if (!owner || !repo) {
+        sendToast('error', pluginName, "Impossibile estrarre proprietario o repository dal percorso GitHub fornito.");
+        return;
+    }
+
+    let apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${contentPath}`;
+    if (branch) apiUrl += `?ref=${branch}`;
+
+    sendToast('info', pluginName, "Fetching file list from GitHub...");
+
+    try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) {
+            let errorMessage = `Could not fetch file list from GitHub. Status: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.message) {
+                    errorMessage += ` - ${errorData.message}`;
+                }
+            } catch (jsonError) {
+                // Ignora errori di parsing JSON se la risposta non è JSON
+            }
+            throw new Error(errorMessage);
+        }
+        
+        const files = await response.json();
+        const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
+
+        if (csvFiles.length === 0) {
+            if (!isAutoStartup) sendToast('warning', pluginName, "No CSV files found in the remote directory.");
+            return;
+        }
+
+        if (!isAutoStartup && !confirm(`Found ${csvFiles.length} files on GitHub. Do you want to import them all?`)) {
+            return;
+        }
+
+        isServerImport = true; // Use server import flag to avoid individual confirms during batch
+        let count = 0;
+        for (const file of csvFiles) {
+            try {
+                const fileRes = await fetch(file.download_url);
+                const csvText = await fileRes.text();
+                importFromCSV(csvText);
+
+                // Traccia il file importato da GitHub nel localStorage
+                const remoteStore = JSON.parse(localStorage.getItem("LoggedStationsRemoteFiles") || "{}");
+                remoteStore[file.name] = { mtimeMs: Date.now(), source: 'GitHub' };
+                localStorage.setItem("LoggedStationsRemoteFiles", JSON.stringify(remoteStore));
+
+                count++;
+            } catch (e) {
+                console.error(`Error importing ${file.name}:`, e);
+            }
+        }
+        isServerImport = false;
+        sendToast('success', pluginName, `Successfully imported ${count} files from GitHub!`);
+    } catch (error) {
+        sendToast('error', pluginName, "GitHub Import Error: " + error.message);
+    }
+  }
+
+  function showStartupSettings() {
+    const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
+    const githubUrl = localStorage.getItem("LoggedStationsRemoteUrl") || "https://github.com/mm-prg/TefData/tree/main/LoggedStations";
+
+    const html = `
+      <h3>Startup Settings</h3>
+      <p style="margin-bottom:15px; color:#ccc;">Choose what the plugin should do when it starts up:</p>
+      <div style="margin-bottom:20px;">
+        <label style="display:block; margin-bottom:12px; cursor:pointer; font-size:14px;">
+          <input type="radio" name="startupBehavior" value="server" ${behavior === 'server' ? 'checked' : ''}> 
+          Download from local server (/files folder)
+        </label>
+        <label style="display:block; margin-bottom:12px; cursor:pointer; font-size:14px;">
+          <input type="radio" name="startupBehavior" value="remote" ${behavior === 'remote' ? 'checked' : ''}> 
+          Download from GitHub
+        </label>
+        <div id="startupRemoteUrlContainer" style="margin-left:25px; margin-bottom:15px; display: ${behavior === 'remote' ? 'block' : 'none'};">
+            <input type="text" id="startupRemoteUrl" value="${githubUrl}" style="width:100%; background:#333; color:#eee; border:1px solid #555; padding:8px; font-size:12px; border-radius:4px;" placeholder="GitHub URL or user/repo/path">
+        </div>
+        <label style="display:block; margin-bottom:12px; cursor:pointer; font-size:14px;">
+          <input type="radio" name="startupBehavior" value="none" ${behavior === 'none' ? 'checked' : ''}> 
+          Do not download data automatically (local only)
+        </label>
+      </div>
+      <button id="saveStartupBtn" style="padding:8px 16px; cursor:pointer; background:var(--color-5); color:white; border:none; border-radius:4px; font-weight:bold;">Save Settings</button>
+    `;
+
+    showSecondPopup(html);
+
+    const popup = document.getElementById('LoggedStationsSecondPopup');
+    const radios = popup.querySelectorAll('input[name="startupBehavior"]');
+    const urlContainer = popup.querySelector('#startupRemoteUrlContainer');
+    const urlInput = popup.querySelector('#startupRemoteUrl');
+
+    radios.forEach(r => { r.onchange = () => { urlContainer.style.display = r.value === 'remote' ? 'block' : 'none'; }; });
+
+    popup.querySelector('#saveStartupBtn').onclick = () => {
+      const selected = popup.querySelector('input[name="startupBehavior"]:checked').value;
+      localStorage.setItem("LoggedStationsStartupBehavior", selected);
+      if (selected === 'remote') localStorage.setItem("LoggedStationsRemoteUrl", urlInput.value.trim());
+      sendToast('success', pluginName, "Startup settings saved!");
+      popup.remove();
+    };
+  }
+
+  // ==============================
+  // POPUP HANDLING
+  // ==============================
 
   // ==============================
   // SAVE NOTES LOCALLY
