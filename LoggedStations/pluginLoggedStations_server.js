@@ -1,5 +1,5 @@
 /*
-    LoggedStations v. 0.0.2
+    LoggedStations v. 0.0.3
 */
 
 'use strict';
@@ -27,6 +27,7 @@ const pluginName = "LoggedStations";
 
 const csvDirectory = path.join(__dirname, 'files');
 const uploadedStorePath = path.join(__dirname, 'uploadedFiles.json');
+const settingsPath = path.join(__dirname, '../../plugins_configs/LoggedStations.json');
 
 function loadUploadedStore() {
     try {
@@ -47,6 +48,44 @@ function saveUploadedStore(store) {
         logError(`[${pluginName}] Error saving uploaded store:`, e);
     }
 }
+
+function loadSettings() {
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const raw = fs.readFileSync(settingsPath, 'utf8');
+            return JSON.parse(raw || '{}');
+        }
+    } catch (e) {
+        logError(`[${pluginName}] Error loading settings:`, e);
+    }
+    return {
+        startupBehavior: "server",
+        remoteUrl: "https://github.com/mm-prg/TefData/tree/main/LoggedStations",
+        fmlistOmid: "",
+        showToAllUsers: true
+    };
+}
+
+// ==============================
+// Settings endpoints
+// ==============================
+endpointsRouter.get('/plugins/LoggedStations/settings', (req, res) => {
+    res.json(loadSettings());
+});
+
+endpointsRouter.post('/plugins/LoggedStations/settings', express.json(), (req, res) => {
+    try {
+        const settings = req.body;
+        if (!fs.existsSync(path.dirname(settingsPath))) {
+            fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+        }
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+        res.json({ ok: true });
+    } catch (e) {
+        logError(`[${pluginName}] Error saving settings:`, e);
+        res.status(500).json({ ok: false });
+    }
+});
 
 // ==============================
 // File list endpoint
@@ -173,7 +212,8 @@ endpointsRouter.post('/plugins/LoggedStations/fmlistLog', express.json(), (req, 
         return res.status(400).json({ ok: false, error: 'UUID token missing' });
     }
 
-    const omid = config.extras?.fmlistOmid || "";
+    const pSettings = loadSettings();
+    const omid = pSettings.fmlistOmid || config.extras?.fmlistOmid || "";
     const freq = parseFloat(data.freq).toFixed(2);
     const distance = parseFloat(data.distance);
     

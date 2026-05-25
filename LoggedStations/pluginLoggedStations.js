@@ -9,109 +9,62 @@
   // GLOBAL VARIABLES
   // ==============================
   const pluginName = "LoggedStations";
-  const pluginVersion = "0.0.2";
+  const pluginVersion = "0.0.3";
   let notesMap = JSON.parse(localStorage.getItem("LoggedStationsMap") || localStorage.getItem("BandscanLogMap") || "{}");
   let freq = null;
+  let pluginSettings = {
+    startupBehavior: "server",
+    remoteUrl: "",
+    fmlistOmid: "",
+    showToAllUsers: true
+  };
   let isServerImport = false;
-
-  const CHECK_FOR_UPDATES = true;
-  const pluginSetupOnlyNotify = true;
-  const pluginHomepageUrl  = "https://github.com/mm-prg/LoggedStations"; // As per TODO
-  const pluginUpdateUrl    = "https://raw.githubusercontent.com/mm-prg/LoggedStations/main/LoggedStations/pluginLoggedStations.js"; // Placeholder
 
   // ==============================
   // INITIALIZATION
   // ==============================
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
     getFreq();
     drawIcon();
     initMainPanel();
-    // plugin area button, no longer used because everything is now done via the icon
-    // addManageButton();
-    const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
-    if (behavior === "server") {
+
+    // Forza il caricamento iniziale dei dati se la frequenza è già presente nel DOM
+    const targetNode = document.getElementById("data-frequency");
+    if (targetNode && window.location.pathname !== "/setup") {
+        const initialFreq = Number(typeof data !== 'undefined' ? data.freq : 0) || Number(targetNode.textContent);
+        if (initialFreq && !isNaN(initialFreq)) {
+            freq = initialFreq;
+            updateNotes(freq);
+        }
+    }
+
+    // Carica le impostazioni dal server all'avvio
+    try {
+        const response = await fetch('/plugins/LoggedStations/settings');
+        if (response.ok) {
+            const remoteSettings = await response.json();
+            pluginSettings = { ...pluginSettings, ...remoteSettings };
+            // Sincronizza localStorage per fallback o compatibilità
+            localStorage.setItem("LoggedStationsStartupBehavior", pluginSettings.startupBehavior);
+            localStorage.setItem("LoggedStationsRemoteUrl", pluginSettings.remoteUrl);
+            localStorage.setItem("LoggedStationsOmid", pluginSettings.fmlistOmid || "");
+            localStorage.setItem("LoggedStationsShowToAll", pluginSettings.showToAllUsers);
+        }
+    } catch (e) {
+        console.warn(`[${pluginName}] Could not load settings from server, using defaults.`);
+        pluginSettings.startupBehavior = localStorage.getItem("LoggedStationsStartupBehavior") || pluginSettings.startupBehavior;
+        pluginSettings.remoteUrl = localStorage.getItem("LoggedStationsRemoteUrl") || pluginSettings.remoteUrl;
+    }
+
+    if (pluginSettings.startupBehavior === "server") {
         checkServerCSVFiles();
-    } else if (behavior === "remote") {
-        const savedUrl = localStorage.getItem("LoggedStationsRemoteUrl");
-        if (savedUrl) {
-            importFromGitHub(savedUrl, true);
+    } else if (pluginSettings.startupBehavior === "remote") {
+        if (pluginSettings.remoteUrl) {
+            importFromGitHub(pluginSettings.remoteUrl, true);
         }
     }
-    if (CHECK_FOR_UPDATES) {
-        checkUpdate(pluginSetupOnlyNotify, pluginName, pluginHomepageUrl, pluginUpdateUrl);
-    }
+
   });
-
-  // ==============================
-  // UPDATE CHECK (from Scanner plugin)
-  // ==============================
-  function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
-    if (setupOnly && window.location.pathname !== '/setup') return;
-
-    let pluginVersionCheck = typeof pluginVersion !== 'undefined' ? pluginVersion : 'Unknown';
-
-    async function fetchRemoteVersion() {
-        const urlCheckForUpdate = urlFetchLink;
-        try {
-            const response = await fetch(urlCheckForUpdate);
-            if (!response.ok) {
-                throw new Error(`[${pluginName}] update check HTTP error! status: ${response.status}`);
-            }
-            const text = await response.text();
-            const lines = text.split('\n');
-            let version;
-
-            // Try to find version in comment like: /* LoggedStations 0.0.6 (19.1.2026) */
-            const commentMatch = lines[0].match(/\/\*\s*LoggedStations\s+([0-9\.]+)/);
-            if (commentMatch && commentMatch[1]) {
-                version = commentMatch[1];
-            } else {
-                version = "Unknown";
-            }
-            return version;
-        } catch (error) {
-            console.error(`[${pluginName}] error fetching file:`, error);
-            return null;
-        }
-    }
-
-    fetchRemoteVersion().then(newVersion => {
-        if (newVersion && newVersion !== pluginVersionCheck) {
-            const updateConsoleText = "There is a new version of this plugin available";
-            console.log(`[${pluginName}] ${updateConsoleText}: ${pluginVersionCheck} -> ${newVersion}`);
-            setupNotify(pluginVersionCheck, newVersion, pluginName, urlUpdateLink);
-        }
-    });
-
-    function setupNotify(pluginVersionCheck, newVersion, pluginName, urlUpdateLink) {
-        if (window.location.pathname === '/setup') {
-            const pluginSettings = document.getElementById('plugin-settings');
-            if (pluginSettings) {
-                const currentText = pluginSettings.textContent.trim();
-                const newText = `<a href="${urlUpdateLink}" target="_blank">[${pluginName}] Update available: ${pluginVersionCheck} --> ${newVersion}</a><br>`;
-
-                if (currentText === 'No plugin settings are available.') {
-                    pluginSettings.innerHTML = newText;
-                } else {
-                    pluginSettings.innerHTML += ' ' + newText;
-                }
-            }
-
-            const updateIcon = document.querySelector('.wrapper-outer #navigation .sidenav-content .fa-puzzle-piece') || document.querySelector('.wrapper-outer .sidenav-content') || document.querySelector('.sidenav-content');
-            if (updateIcon) {
-                const redDot = document.createElement('span');
-                redDot.style.display = 'block';
-                redDot.style.width = '12px';
-                redDot.style.height = '12px';
-                redDot.style.borderRadius = '50%';
-                redDot.style.backgroundColor = '#FE0830';
-                redDot.style.marginLeft = '82px';
-                redDot.style.marginTop  = '-12px';
-                updateIcon.appendChild(redDot);
-            }
-        }
-    }
-  }
 
   // ==============================
   // UPDATE STATION ICON & TOOLTIP
@@ -123,9 +76,9 @@
         return;
     }
 
-    const btnText = btn.textContent;
+    const oldHtml = btn.innerHTML;
     btn.disabled = true;
-    btn.textContent = "...";
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
 
     fetch('/plugins/LoggedStations/fmlistLog', {
         method: 'POST',
@@ -149,7 +102,7 @@
     })
     .finally(() => {
         btn.disabled = false;
-        btn.textContent = btnText;
+        btn.innerHTML = oldHtml;
     });
   }
 
@@ -177,33 +130,34 @@
 
     const mainPanel = document.createElement("div");
     mainPanel.id = "logged-stations-main-panel";
-    mainPanel.style.margin = "10px auto";
+    mainPanel.style.margin = "10px 0";
     mainPanel.style.padding = "10px";
     mainPanel.style.boxSizing = "border-box";
     mainPanel.style.background = "var(--bg-color-2, #2a2a2a)";
     mainPanel.style.borderRadius = "4px";
     mainPanel.style.borderLeft = "3px solid var(--color-5)";
-    mainPanel.style.display = "none";
+    mainPanel.style.display = "block";
     mainPanel.style.fontSize = "13px";
     mainPanel.style.lineHeight = "1.4";
     mainPanel.style.color = "#eee";
-    mainPanel.style.maxHeight = "300px";
-    mainPanel.style.overflowY = "auto";
-
-    const syncWidth = () => {
-      mainPanel.style.width = wrapper.getBoundingClientRect().width + "px";
-    };
-
-    if (wrapper.parentNode) {
-      wrapper.parentNode.insertBefore(mainPanel, wrapper.nextSibling);
-      syncWidth();
-      window.addEventListener("resize", syncWidth);
-    }
+    mainPanel.style.minHeight = "175px"; // Garantisce spazio per header + circa 5-6 stazioni
+    // Appendo il pannello direttamente al wrapper affinché ne erediti i vincoli
+    wrapper.appendChild(mainPanel);
   }
 
   function updateNotes(f) {
     const freqContainer = document.getElementById("freq-container");
     if (!freqContainer) return;
+
+    // Controllo visibilità: se limitato agli admin, nascondi tutto per gli utenti comuni
+    const isUserAdmin = typeof isAdmin !== 'undefined' && isAdmin;
+    if (!pluginSettings.showToAllUsers && !isUserAdmin) {
+        const mainPanel = document.getElementById("logged-stations-main-panel");
+        if (mainPanel) mainPanel.style.display = "none";
+        const pluginBox = document.getElementById("logged-stations-plugin-box");
+        if (pluginBox) pluginBox.style.display = "none";
+        return;
+    }
 
     // Search for stations on the current frequency and nearby ones
     // FM: +-50kHz, MW/LW: +-5kHz
@@ -223,7 +177,19 @@
 
       // Miglioramento come da TODO: Sposta gradi e direzione davanti e ordina alfabeticamente
       stationData = rawRecords.map(item => {
-        const note = item.record;
+        let note = item.record;
+        const itemFreqNum = parseFloat(item.freq);
+
+        // Rimuove la frequenza dall'inizio della nota solo se coincide con quella sintonizzata (f)
+        if (Math.abs(itemFreqNum - f) < 0.001) {
+            const fRaw = item.freq.toString();
+            const fFixed = itemFreqNum.toFixed(3);
+            if (note.startsWith(fRaw + " ")) note = note.substring(fRaw.length + 1);
+            else if (note.startsWith(fFixed + " ")) note = note.substring(fFixed.length + 1);
+            else if (note.startsWith(fRaw)) note = note.substring(fRaw.length);
+            else if (note.startsWith(fFixed)) note = note.substring(fFixed.length);
+        }
+        note = note.trim();
         // Usa lo spazio non breakabile (\u00A0) per evitare che il browser tagli gli spazi iniziali nel tooltip
         const NBSP = "\u00A0";
 
@@ -267,13 +233,11 @@
 
     if (mainPanel) {
       if (f !== null && !isNaN(f)) {
-        mainPanel.style.display = "block";
-
         const isFMCurrent = f > 50;
         const isSWCurrent = f >= 2.3 && f < 50;
         const isLWMWCurrent = f < 2.3;
 
-        const toolbarBtnStyle = "padding:1px 0; font-size:10px; margin:0; line-height:1; width:45px; text-align:center; height:18px; cursor:pointer;";
+        const toolbarBtnStyle = "padding:1px 5px; font-size:11px; margin:0; line-height:1; width:auto; text-align:center; height:26px; cursor:pointer;";
         let toolbarBtns = [];
         if (isFMCurrent) {
             toolbarBtns.push(`<a href="https://www.fmlist.org/fm_logmap.php?datum=0&hours=43200&band=ALL&target=ALL&rxin=Eur" target="_blank"><button style="${toolbarBtnStyle}" title="FM Visual Logbook">V-Log</button></a>`);
@@ -284,15 +248,15 @@
             toolbarBtns.push(`<a href="https://dxrobot.gooddx.net/" target="_blank"><button style="${toolbarBtnStyle}" title="DX Robot">Robot</button></a>`);
             toolbarBtns.push(`<a href="https://www.dxmaps.com/spots/mapg.php?Lan=E" target="_blank"><button style="${toolbarBtnStyle}" title="DXMaps">Maps</button></a>`);
         } else if (isSWCurrent) {
-            toolbarBtns.push(`<a href="https://www.mwlist.org/mw_logmap.php?sort=&datum=0&hours=86400&band=ALL&rxin=Eur" target="_blank"><button style="${toolbarBtnStyle}">SW-Log</button></a>`);
+            toolbarBtns.push(`<a href="https://www.mwlist.org/mw_logmap.php?sort=&datum=0&hours=86400&band=ALL&rxin=Eur" target="_blank"><button style="${toolbarBtnStyle}" title="SW Visual Logbook">SW-Log</button></a>`);
         } else if (isLWMWCurrent) {
-            toolbarBtns.push(`<a href="https://www.mwlist.org/mw_logmap.php?sort=&datum=0&hours=86400&band=ALL&rxin=Eur" target="_blank"><button style="${toolbarBtnStyle}">MW-Log</button></a>`);
+            toolbarBtns.push(`<a href="https://www.mwlist.org/mw_logmap.php?sort=&datum=0&hours=86400&band=ALL&rxin=Eur" target="_blank"><button style="${toolbarBtnStyle}" title="MW Visual Logbook">MW-Log</button></a>`);
         }
         const toolbarHtml = toolbarBtns.length > 0 ? `<div style="display:flex; gap:2px; flex-shrink:0;">${toolbarBtns.join('')}</div>` : '';
 
         const header = `
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:5px;">
-                <div style="display:flex; align-items:center; font-weight: bold; font-size:11px; color: var(--color-5); white-space:nowrap; position:relative;">
+                <div style="display:flex; align-items:center; font-weight: bold; font-size:14px; color: var(--color-5); white-space:nowrap; position:relative;">
                     <i class="fa-solid fa-bars" id="ls-menu-btn" style="cursor:pointer; margin-right:4px; padding: 2px 5px;" title="Data Import/Export"></i>
                     <div id="ls-dropdown-menu" style="display:none; position:absolute; top:22px; left:0; background: #2a2a2a; border:1px solid #555; border-radius:4px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.5); min-width:170px; padding:4px 0;">
                         <div class="ls-dropdown-item" data-action="import-csv" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px; border-bottom:1px solid #444;">⬆ Import CSV</div>
@@ -307,7 +271,7 @@
                         <div class="ls-dropdown-item" data-action="startup-settings" style="padding:8px 12px; cursor:pointer; font-weight:normal; color:#eee; font-size:12px;">⚙️ Startup Settings</div>
                     </div>
 
-                    ${pluginName} v${pluginVersion} <span style="color:#888; margin-left:8px;">${f.toFixed(3)} MHz</span>
+                    ${pluginName} (v${pluginVersion}) <span style="color:#888; margin-left:8px;">${f.toFixed(3)} MHz</span>
                 </div>
                 ${toolbarHtml}
             </div>`;
@@ -322,23 +286,38 @@
             const isSW = freqNum >= 2.3 && freqNum < 50;
             const isLWMW = freqNum < 2.3;
             
-            const btnStyle = "padding:1px 0; font-size:10px; margin:0; line-height:1; width:45px; text-align:center; height:18px;";
-            let actionBtns = [];
+            const dist = parseInt(meta.qrb, 10);
+            const isDX = !isNaN(dist) && dist >= 200;
+
+
+            let displayNote = cleanNote;
+            // Highlight station name in bold
+            if (meta.name && meta.name !== "Station") {
+                const nameIndex = cleanNote.indexOf(meta.name);
+                if (nameIndex !== -1) {
+                    displayNote = cleanNote.substring(0, nameIndex) + 
+                                  `<strong>${meta.name}</strong>` + 
+                                  cleanNote.substring(nameIndex + meta.name.length);
+                }
+            }
+
+            const btnStyle = "padding:1px 0; font-size:14px; margin:0; line-height:1; width:30px; text-align:center; height:26px; cursor:pointer;";
+            const actionBtns = [];
 
             if (isFM) {
-                actionBtns.push(`<a href="https://maps.fmdx.org/#qth=${qthLat},${qthLon}&freq=${item.freq}&findPi=${meta.pi}" target="_blank"><button style="${btnStyle}" title="FMDX PI">PI</button></a>`);
-                actionBtns.push(`<a href="https://maps.fmdx.org/#lat=${qthLat}&lon=${qthLon}&freq=${item.freq}&r=300" target="_blank"><button style="${btnStyle}" title="FMDX Freq">Map</button></a>`);
-                actionBtns.push(`<a href="https://fmscan.org/main.php?f=${item.freq}&maptype=2&m=m&area=300" target="_blank"><button style="${btnStyle}" title="FMScan">Scan</button></a>`);
-                actionBtns.push(`<a href="https://fmstream.org/?s=${encodeURIComponent(meta.name)}" target="_blank"><button style="${btnStyle}" title="FMStream">Live</button></a>`);
-                actionBtns.push(`<button class="mini-btn log-action" data-idx="${idx}" style="${btnStyle}">Log</button>`);
+                actionBtns.push(`<a href="https://maps.fmdx.org/#qth=${qthLat},${qthLon}&freq=${item.freq}&findPi=${meta.pi}" target="_blank"><button style="${btnStyle}" title="FMDX PI"><i class="fa-solid fa-fingerprint"></i></button></a>`);
+                actionBtns.push(`<a href="https://maps.fmdx.org/#lat=${qthLat}&lon=${qthLon}&freq=${item.freq}&r=300" target="_blank"><button style="${btnStyle}" title="FMDX Freq"><i class="fa-solid fa-map"></i></button></a>`);
+                actionBtns.push(`<a href="https://fmscan.org/main.php?f=${item.freq}&maptype=2&m=m&area=300" target="_blank"><button style="${btnStyle}" title="FMScan"><i class="fa-solid fa-tower-broadcast"></i></button></a>`);
+                actionBtns.push(`<a href="https://fmstream.org/?s=${encodeURIComponent(meta.name)}" target="_blank"><button style="${btnStyle}" title="FMStream"><i class="fa-solid fa-play"></i></button></a>`);
+                actionBtns.push(`<button class="mini-btn log-action" data-idx="${idx}" style="${btnStyle}" title="Log FMLIST"><i class="fa-solid fa-flag"></i></button>`);
                 if (meta.pi) {
-                    actionBtns.push(`<button class="mini-btn af-action" data-idx="${idx}" style="${btnStyle}">AF</button>`);
+                    actionBtns.push(`<button class="mini-btn af-action" data-idx="${idx}" style="${btnStyle}" title="Alternative Frequencies">AF</button>`);
                 }
             } else if (isLWMW) {
-                actionBtns.push(`<a href="https://www.mwlist.org/mwlist_quick_and_easy.php?area=1&kHz=${freqNum * 1000}" target="_blank"><button style="${btnStyle}">Mw-f</button></a>`);
-                actionBtns.push(`<a href="https://www.mwlist.org/" target="_blank"><button style="${btnStyle}">Mw-h</button></a>`);
+                actionBtns.push(`<a href="https://www.mwlist.org/mwlist_quick_and_easy.php?area=1&kHz=${freqNum * 1000}" target="_blank"><button style="${btnStyle}" title="MWList Search"><i class="fa-solid fa-magnifying-glass"></i></button></a>`);
+                actionBtns.push(`<a href="https://www.mwlist.org/" target="_blank"><button style="${btnStyle}" title="MWList Homepage"><i class="fa-solid fa-house"></i></button></a>`);
             } else if (isSW) {
-                actionBtns.push(`<a href="https://www.short-wave.info/index.php?freq=${freqNum * 1000}" target="_blank"><button style="${btnStyle}">Sw-i</button></a>`);
+                actionBtns.push(`<a href="https://www.short-wave.info/index.php?freq=${freqNum * 1000}" target="_blank"><button style="${btnStyle}" title="short-wave.info"><i class="fa-solid fa-info"></i></button></a>`);
             }
 
             const buttonsHtml = actionBtns.length > 0 
@@ -346,11 +325,12 @@
                 : '';
 
             return `
-            <div class="station-row" style="display:flex; align-items:center; gap:8px; margin-bottom: 4px; padding-bottom: 2px; border-bottom: 1px dotted #444;">
-                <div class="tune-action" data-freq="${item.freq}" style="font-size:12px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-grow:1;" title="Tune to ${item.freq} MHz">${cleanNote}</div>
+            <div class="station-row" style="display:flex; align-items:center; gap:8px; margin-bottom: 4px; padding-bottom: 2px; border-bottom: 1px dotted #444; ${isDX ? 'background: rgba(255, 215, 0, 0.05);' : ''}">
+                <div style="font-size:12px; cursor:default; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex-grow:1; ${isDX ? 'color: #ffd700; font-weight: bold;' : ''}" title="${cleanNote}">${displayNote}</div>
                 ${buttonsHtml}
             </div>`;
-        }).join('');
+        });
+        list = `<div id="ls-stations-list" style="max-height: 250px; overflow-y: auto; padding-right: 4px;">${list.join('')}</div>`;
         } else {
             list = `<div style="padding:10px; color:#888; text-align:center; font-style:italic;">No logged stations for this frequency.</div>`;
         }
@@ -417,16 +397,6 @@
                 showOtherFrequencies(meta.pi, item.freq);
             };
         });
-        mainPanel.querySelectorAll('.tune-action').forEach(div => {
-            div.onclick = () => {
-                const tuneFreq = parseFloat(div.dataset.freq);
-                if (window.socket && window.socket.readyState === WebSocket.OPEN) {
-                    window.socket.send('T' + Math.round(tuneFreq * 1000));
-                } else {
-                    sendToast('error', pluginName, "Error: WebSocket not connected.");
-                }
-            };
-        });
         }
       } else {
         mainPanel.style.display = "none";
@@ -464,19 +434,25 @@
     icon.style.color = "var(--color-5)";
     icon.style.lineHeight = "1";
 
+    const togglePanel = () => {
+      if (mainPanel) {
+        mainPanel.style.display = mainPanel.style.display === "none" ? "block" : "none";
+      }
+    };
+
     // Check if there are stations for that frequency
     if (rawNotes && rawNotes.length > 0) {
       // ✅ NOTES FOUND
       icon.className = "fa-solid fa-radio";
       icon.style.opacity = "0.8";
       icon.title = Array.isArray(rawNotes) ? rawNotes.join("\n") : rawNotes;
-      icon.onclick = () => openManager(f);
+      icon.onclick = togglePanel;
     } else {
       // ❌ NO NOTES
       icon.className = "fa-solid fa-circle";
       icon.style.opacity = "0.5";
       icon.title = "No data for this frequency";
-      icon.onclick = () => openManager(f);
+      icon.onclick = togglePanel;
     }
 
     // aggiunge l'icona al contenitore
@@ -500,6 +476,8 @@
         return sum + records.length;
     }, 0);
 
+    const popupToolbarStyle = "padding:4px 8px; width:auto; height:30px; font-size:12px; cursor:pointer;";
+
     const popupHTML = `
     <div style="padding:10px; position:relative;">
 
@@ -519,43 +497,43 @@
     ">
         ${(freq !== null && freq >= 50) ? `
         <a href="https://www.fmlist.org/fm_logmap.php?datum=0&hours=43200&band=ALL&target=ALL&rxin=Eur" target="_blank">
-            <button title="View FM logbook map on fmlist.org" style="padding:4px 8px; font-size:12px;">FM Visual Logbook</button>
+            <button title="View FM logbook map on fmlist.org" style="${popupToolbarStyle}">V-Log</button>
         </a>
         <a href="https://www.fmlist.org/ul_frameset.php?" target="_blank">
-            <button title="Open fmlist.org main page (login needed)" style="padding:4px 8px; font-size:12px;">fmlist</button>
+            <button title="Open fmlist.org main page" style="${popupToolbarStyle}">fmlist</button>
         </a>
         <a href="https://www.fmlist.org/fi_bandscan.php" target="_blank">
-            <button title="Open fmlist.org bandscan tool (login needed)" style="padding:4px 8px; font-size:12px;">fmlist bandscan</button>
+            <button title="Open fmlist.org bandscan tool" style="${popupToolbarStyle}">Bandscan</button>
         </a>
 
         <a href="https://highpoint.fmdx.org/webtools/sporadic-e-monitor.html" target="_blank">
-            <button title="Highpoint's Es Monitor" style="padding:4px 8px; font-size:12px;">Es Monitor</button>
+            <button title="Highpoint's Es Monitor" style="${popupToolbarStyle}">Es Mon</button>
         </a>
 
         <a href="https://www.dxinfocentre.com/tropo_eur.html" target="_blank">
-            <button title="View William Hepburn's Tropospheric Ducting Forecast" style="padding:4px 8px; font-size:12px;">Tropo Hepburn</button>
+            <button title="View William Hepburn's Tropospheric Ducting Forecast" style="${popupToolbarStyle}">Hepburn</button>
         </a>
         <a href="https://tropo.f5len.org/forecasts-for-europe/" target="_blank">
-            <button title="View F5LEN Tropospheric Propagation Forecast" style="padding:4px 8px; font-size:12px;">Tropo f5len</button>
+            <button title="View F5LEN Tropospheric Propagation Forecast" style="${popupToolbarStyle}">f5len</button>
         </a>
 
         <a href="https://dxrobot.gooddx.net/" target="_blank">
-            <button title="View DX Robot real-time spots" style="padding:4px 8px; font-size:12px;">gooddx.net</button>
+            <button title="View DX Robot real-time spots" style="${popupToolbarStyle}">Robot</button>
         </a>
         <a href="https://www.dxmaps.com/spots/mapg.php?Lan=E" target="_blank">
-            <button title="View DXMaps real-time propagation maps" style="padding:4px 8px; font-size:12px;">dxmaps</button>
+            <button title="View DXMaps real-time propagation maps" style="${popupToolbarStyle}">Maps</button>
         </a>
         ` : ''}
 
         ${(freq !== null && freq < 50 && freq >= 2.3) ? `
         <a href="https://www.mwlist.org/mw_logmap.php?sort=&datum=0&hours=86400&band=ALL&rxin=Eur" target="_blank">
-            <button title="View SW (login needed)" style="padding:4px 8px; font-size:12px;">SWk</button>
+            <button title="View SW logbook map" style="${popupToolbarStyle}">SW-Log</button>
         </a>
         ` : ''}
 
         ${(freq !== null && freq < 50 && freq <= 2.3) ? `
         <a href="https://www.mwlist.org/mw_logmap.php?sort=&datum=0&hours=86400&band=ALL&rxin=Eur" target="_blank">
-            <button title="View MW logbook map on mwlist.org (login needed)" style="padding:4px 8px; font-size:12px;">MW Visual Logbook</button>
+            <button title="View MW logbook map on mwlist.org" style="${popupToolbarStyle}">MW-Log</button>
         </a>
         ` : ''}
 
@@ -831,7 +809,7 @@
           const isLast = index === otherFreqResults.length - 1;
 
           return `
-            <li data-freq="${r.freq}" style="padding: 8px 0; cursor: pointer; ${!isLast ? 'border-bottom: 1px solid #444;' : ''}" title="Sintonizza ${r.freq} MHz">
+            <li data-freq="${r.freq}" style="padding: 8px 0; cursor: pointer; ${!isLast ? 'border-bottom: 1px solid #444;' : ''}" title="Tune to ${r.freq} MHz">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <span style="font-weight: bold; font-size: 1.1em;">${r.freq} MHz</span>
                     <span style="font-style: italic;">${station}</span>
@@ -1010,6 +988,7 @@
           const mapsUrlMwlist2 = `https://www.mwlist.org/`;
           const mapsUrlSwinfo = `https://www.short-wave.info/index.php?freq=${freq * 1000}`;
 
+          const tableBtnStyle = "padding:2px 0; font-size:15px; width:34px; height:28px; cursor:pointer;";
           rowsHTML += `<tr data-freq="${freq}" style="border-bottom:1px solid #ccc;">
                     <td ${singleFreqMode ? "" : 'contenteditable="true"'} class="freqCell">${freq}</td>
                     <td ${singleFreqMode ? "" : 'contenteditable="true"'} class="noteCell">${record}</td>
@@ -1025,14 +1004,14 @@
                         ${
                           isFM
                             ? `
-                            <a href="${mapsUrlPi}" target="_blank"><button title="Show station on maps.fmdx.org (PI)">maps.fmdx</button></a>
-                            <a href="${mapsUrlFreq}" target="_blank"><button title="Show frequency on maps.fmdx.org">${freq}</button></a>
-                            <a href="${mapsUrlFmscan}" target="_blank"><button title="Show frequency on fmscan.org">fmscan</button></a>
-                            <a href="${mapsUrlFmstream}" target="_blank"><button title="Listen on fmstream.org">fmstream</button></a>
+                            <a href="${mapsUrlPi}" target="_blank"><button style="${tableBtnStyle}" title="Show station on maps.fmdx.org (PI)"><i class="fa-solid fa-fingerprint"></i></button></a>
+                            <a href="${mapsUrlFreq}" target="_blank"><button style="${tableBtnStyle}" title="Show frequency on maps.fmdx.org"><i class="fa-solid fa-map"></i></button></a>
+                            <a href="${mapsUrlFmscan}" target="_blank"><button style="${tableBtnStyle}" title="Show frequency on fmscan.org"><i class="fa-solid fa-tower-broadcast"></i></button></a>
+                            <a href="${mapsUrlFmstream}" target="_blank"><button style="${tableBtnStyle}" title="Listen on fmstream.org"><i class="fa-solid fa-play"></i></button></a>
                             
-                            <button class="fmlist-log-btn" data-freq="${freq}" data-pi="${piCode}" data-ps="${name}" data-sid="${fmlistId}" data-dist="${qrb}" data-itu="${itu}" title="Automated log on fmlist.org">Log FMLIST</button>
+                            <button class="fmlist-log-btn" data-freq="${freq}" data-pi="${piCode}" data-ps="${name}" data-sid="${fmlistId}" data-dist="${qrb}" data-itu="${itu}" title="Automated log on fmlist.org" style="${tableBtnStyle}"><i class="fa-solid fa-flag"></i></button>
 
-                            ${piCode ? `<a href="#"><button class="pi-search-btn" data-pi="${piCode}" data-freq="${freq}" title="Search for Alternative Frequencies (AF)">AF</button></a>` : ''}
+                            ${piCode ? `<a href="#"><button class="pi-search-btn" data-pi="${piCode}" data-freq="${freq}" title="Search for Alternative Frequencies (AF)" style="${tableBtnStyle}">AF</button></a>` : ''}
 
                         `
                             : ""
@@ -1041,8 +1020,8 @@
                         ${
                           isLWMW
                             ? `
-                            <a href="${mapsUrlMwlist}" target="_blank"><button title="Show frequency on mwlist.org">Mwlist freq</button></a>
-                            <a href="${mapsUrlMwlist2}" target="_blank"><button title="mwlist.org (homepage)">Mwlist homepage</button></a>
+                            <a href="${mapsUrlMwlist}" target="_blank"><button style="${tableBtnStyle}" title="Show frequency on mwlist.org"><i class="fa-solid fa-magnifying-glass"></i></button></a>
+                            <a href="${mapsUrlMwlist2}" target="_blank"><button style="${tableBtnStyle}" title="mwlist.org (homepage)"><i class="fa-solid fa-house"></i></button></a>
 
                         `
                             : ""
@@ -1051,7 +1030,7 @@
                         ${
                           isSW
                             ? `
-                            <a href="${mapsUrlSwinfo}" target="_blank"><button title="Show frequency on short-wave.info">Sw-info</button></a>
+                            <a href="${mapsUrlSwinfo}" target="_blank"><button style="${tableBtnStyle}" title="Show frequency on short-wave.info"><i class="fa-solid fa-info"></i></button></a>
                         `
                             : ""
                         }
@@ -1063,7 +1042,7 @@
       container.innerHTML = `
             ${
               !singleFreqMode
-                ? `<input type="text" id="filterInput" placeholder="Filter by frequency or note..."
+                ? `<input type="text" id="filterInput" placeholder="Filter by frequency or note..." title="Filter by frequency or note"
                 style="width:100%; margin-bottom:8px; padding:5px; font-size:14px;">`
                 : ""
             }
@@ -1253,7 +1232,7 @@
 
   // mark a file as imported
   async function markFileUploaded(name, mtimeMs) {
-    const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
+    const behavior = pluginSettings.startupBehavior;
     
     // save locally
     const store = loadUploadedStore();
@@ -1293,7 +1272,7 @@
   // download a CSV file from the server and import it
   async function getServerFiles() {
     try {
-      const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
+      const behavior = pluginSettings.startupBehavior;
       if (behavior !== "server") return [];
 
       const res = await fetch("/plugins/LoggedStations/files");
@@ -1556,7 +1535,6 @@
     );
 
     saveNotes();
-    sendToast('success', pluginName, `Imported ${freqCount} frequencies from CSV`, true);
     openManager();
   }
 
@@ -1571,7 +1549,7 @@
     }
 
     if (!fullRepoPathInput) {
-        if (!isAutoStartup) sendToast('info', pluginName, "Importazione da GitHub annullata.");
+        if (!isAutoStartup) console.log(`[${pluginName}] GitHub import cancelled by user.`);
         return;
     }
 
@@ -1608,7 +1586,7 @@
     let apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${contentPath}`;
     if (branch) apiUrl += `?ref=${branch}`;
 
-    sendToast('info', pluginName, "Fetching file list from GitHub...");
+    console.log(`[${pluginName}] Fetching file list from GitHub: ${apiUrl}`);
 
     try {
         const response = await fetch(apiUrl);
@@ -1629,7 +1607,7 @@
         const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
 
         if (csvFiles.length === 0) {
-            if (!isAutoStartup) sendToast('warning', pluginName, "No CSV files found in the remote directory.");
+            console.warn(`[${pluginName}] No CSV files found in the remote GitHub directory.`);
             return;
         }
 
@@ -1656,15 +1634,15 @@
             }
         }
         isServerImport = false;
-        sendToast('success', pluginName, `Successfully imported ${count} files from GitHub!`);
+        console.log(`[${pluginName}] Successfully imported ${count} files from GitHub.`);
     } catch (error) {
         sendToast('error', pluginName, "GitHub Import Error: " + error.message);
     }
   }
 
   function showStartupSettings() {
-    const behavior = localStorage.getItem("LoggedStationsStartupBehavior") || "server";
-    const githubUrl = localStorage.getItem("LoggedStationsRemoteUrl") || "https://github.com/mm-prg/TefData/tree/main/LoggedStations";
+    const behavior = pluginSettings.startupBehavior;
+    const githubUrl = pluginSettings.remoteUrl;
 
     const html = `
       <h3>Startup Settings</h3>
@@ -1686,6 +1664,24 @@
           Do not download data automatically (local only)
         </label>
       </div>
+      <div style="margin-top:15px; border-top:1px solid #444; padding-top:15px;">
+        <label style="display:block; margin-bottom:8px; font-size:14px; font-weight:bold;">Visibility:</label>
+        <label style="display:block; margin-bottom:12px; cursor:pointer; font-size:14px;">
+          <input type="radio" name="showToAllUsers" value="true" ${pluginSettings.showToAllUsers ? 'checked' : ''}> 
+          Show stations to all users
+        </label>
+        <label style="display:block; margin-bottom:12px; cursor:pointer; font-size:14px;">
+          <input type="radio" name="showToAllUsers" value="false" ${!pluginSettings.showToAllUsers ? 'checked' : ''}> 
+          Show to administrators only
+        </label>
+      </div>
+      <div style="margin-top:15px; border-top:1px solid #444; padding-top:15px; margin-bottom:20px;">
+        <label style="display:block; margin-bottom:8px; font-size:14px; font-weight:bold;">FMLIST OMID:</label>
+        <input type="text" id="lsOmidInput" value="${pluginSettings.fmlistOmid || ''}" 
+               style="width:100%; background:#333; color:#eee; border:1px solid #555; padding:8px; font-size:12px; border-radius:4px;" 
+               placeholder="Enter your OMID (e.g. 10038)">
+        <p style="font-size:11px; color:#888; margin-top:4px;">Required for sending logs to FMLIST.</p>
+      </div>
       <button id="saveStartupBtn" style="padding:8px 16px; cursor:pointer; background:var(--color-5); color:white; border:none; border-radius:4px; font-weight:bold;">Save Settings</button>
     `;
 
@@ -1698,12 +1694,32 @@
 
     radios.forEach(r => { r.onchange = () => { urlContainer.style.display = r.value === 'remote' ? 'block' : 'none'; }; });
 
-    popup.querySelector('#saveStartupBtn').onclick = () => {
+    popup.querySelector('#saveStartupBtn').onclick = async () => {
       const selected = popup.querySelector('input[name="startupBehavior"]:checked').value;
-      localStorage.setItem("LoggedStationsStartupBehavior", selected);
-      if (selected === 'remote') localStorage.setItem("LoggedStationsRemoteUrl", urlInput.value.trim());
-      sendToast('success', pluginName, "Startup settings saved!");
-      popup.remove();
+      const remoteUrl = urlInput.value.trim();
+      const fmlistOmid = popup.querySelector('#lsOmidInput').value.trim();
+      const showToAllUsers = popup.querySelector('input[name="showToAllUsers"]:checked').value === 'true';
+      
+      const newSettings = { startupBehavior: selected, remoteUrl: remoteUrl, fmlistOmid: fmlistOmid, showToAllUsers: showToAllUsers };
+      
+      try {
+          const res = await fetch('/plugins/LoggedStations/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newSettings)
+          });
+          if (res.ok) {
+              pluginSettings = newSettings;
+              localStorage.setItem("LoggedStationsStartupBehavior", selected);
+              localStorage.setItem("LoggedStationsRemoteUrl", remoteUrl);
+              localStorage.setItem("LoggedStationsOmid", fmlistOmid);
+              localStorage.setItem("LoggedStationsShowToAll", showToAllUsers);
+              sendToast('success', pluginName, "Startup settings saved on server!");
+              popup.remove();
+          } else { throw new Error(); }
+      } catch (e) {
+          sendToast('error', pluginName, "Error saving settings to server.");
+      }
     };
   }
 
@@ -2010,7 +2026,7 @@
     const content = `
         ${html}
         <br>
-        <button onclick="document.getElementById('LoggedStationsSecondPopup').remove()" style="padding:4px 8px; font-size:12px; margin-top: 10px;">Close</button>`;
+        <button onclick="document.getElementById('LoggedStationsSecondPopup').remove()" style="padding:4px 8px; font-size:12px; margin-top: 10px;" title="Close this window">Close</button>`;
     popup.innerHTML = content;
     document.body.appendChild(popup);
 
