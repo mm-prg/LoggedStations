@@ -1,5 +1,5 @@
 /*
-    LoggedStations v. 0.0.3e
+    LoggedStations v. 0.0.3f
 */
 
 'use strict';
@@ -9,14 +9,22 @@ const path = require('path');
 const express = require('express');
 const https = require('https');
 
-// Risale di 2 livelli per raggiungere la root del server: plugins/LoggedStations/ -> plugins/ -> root/
-// Nota: Se il file si trova in una sottocartella ulteriore, regolare il numero di '..'
-const rootDir = path.resolve(__dirname, '..', '..');
+// Funzione per trovare la cartella radice del server cercando config.json verso l'alto
+function findRootDir(currentDir) {
+    const parentDir = path.resolve(currentDir, '..');
+    if (fs.existsSync(path.join(currentDir, 'config.json'))) {
+        return currentDir;
+    }
+    if (currentDir === parentDir) { // Raggiunta la radice del filesystem
+        return process.cwd(); 
+    }
+    return findRootDir(parentDir);
+}
+
+const rootDir = findRootDir(__dirname);
 
 // Log di debug immediati (usiamo console.log perché logInfo non è ancora stato caricato)
-console.log(`[LoggedStations] Initializing backend. __dirname: ${__dirname}`);
-console.log(`[LoggedStations] Calculated rootDir: ${rootDir}`);
-console.log(`[LoggedStations] Attempting to load console from: ${path.join(rootDir, 'server', 'console')}`);
+console.log(`[LoggedStations] Backend Startup: __dirname=${__dirname} -> rootDir=${rootDir}`);
 
 const pluginName = "LoggedStations";
 const { logInfo, logError } = require(path.join(rootDir, 'server', 'console'));
