@@ -9,7 +9,7 @@
   // GLOBAL VARIABLES
   // ==============================
   const pluginName = "LoggedStations";
-  const pluginVersion = "0.0.3c";
+  const pluginVersion = "0.0.3d";
   let notesMap = JSON.parse(localStorage.getItem("LoggedStationsMap") || localStorage.getItem("BandscanLogMap") || "{}");
   let freq = null;
   let pluginSettings = {
@@ -1788,9 +1788,18 @@
               localStorage.setItem("LoggedStationsShowToAll", showToAllUsers);
               sendToast('success', pluginName, "Startup settings saved on server!");
               popup.remove();
-          } else { throw new Error(); }
+          } else { 
+              throw new Error(`Server returned status ${res.status} (${res.statusText})`); 
+          }
       } catch (e) {
-          sendToast('error', pluginName, "Error saving settings to server.");
+          const errorDetail = e.message || "Unknown error";
+          const errorMessage = `Error saving settings to server: ${errorDetail}\n\n` +
+                               `Common causes:\n` +
+                               `- Missing write permissions on 'plugins_configs' folder\n` +
+                               `- Server is offline or unreachable\n` +
+                               `- Backend script 'pluginLoggedStations_server.js' not loaded in LoggedStations.js`;
+          
+          sendToast('error', pluginName, errorMessage);
       }
     };
   }
