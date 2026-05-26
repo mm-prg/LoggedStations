@@ -1,7 +1,7 @@
 // Plugin configuration, this is used in the administration when plugins are loaded
 var pluginConfig = {
     name: 'LoggedStations',
-    version: '0.0.3',
+    version: '0.0.3a',
     author: 'mm-prg',
     frontEndPath: 'LoggedStations/pluginLoggedStations.js'
 }

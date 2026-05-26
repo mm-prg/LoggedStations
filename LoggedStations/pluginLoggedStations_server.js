@@ -1,5 +1,5 @@
 /*
-    LoggedStations v. 0.0.3
+    LoggedStations v. 0.0.3a
 */
 
 'use strict';
@@ -60,7 +60,7 @@ function loadSettings() {
     }
     return {
         startupBehavior: "server",
-        remoteUrl: "https://github.com/mm-prg/TefData/tree/main/LoggedStations",
+        remoteUrl: "",
         fmlistOmid: "",
         showToAllUsers: true
     };

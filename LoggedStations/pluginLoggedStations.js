@@ -9,7 +9,7 @@
   // GLOBAL VARIABLES
   // ==============================
   const pluginName = "LoggedStations";
-  const pluginVersion = "0.0.3";
+  const pluginVersion = "0.0.3a";
   let notesMap = JSON.parse(localStorage.getItem("LoggedStationsMap") || localStorage.getItem("BandscanLogMap") || "{}");
   let freq = null;
   let pluginSettings = {
@@ -1565,7 +1565,7 @@
         owner = githubUrlMatch[1];
         repo = githubUrlMatch[2];
         branch = githubUrlMatch[3];
-        contentPath = githubUrlMatch[4];
+        contentPath = githubUrlMatch[4].replace(/\/+$/, ""); // Rimuove eventuali slash finali per pulizia
     } else {
         // Altrimenti, assume il formato 'owner/repo/path/to/folder'
         const parts = fullRepoPathInput.split('/');
