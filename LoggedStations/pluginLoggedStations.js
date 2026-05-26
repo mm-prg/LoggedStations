@@ -9,7 +9,7 @@
   // GLOBAL VARIABLES
   // ==============================
   const pluginName = "LoggedStations";
-  const pluginVersion = "0.0.3d";
+  const pluginVersion = "0.0.3e";
   let notesMap = JSON.parse(localStorage.getItem("LoggedStationsMap") || localStorage.getItem("BandscanLogMap") || "{}");
   let freq = null;
   let pluginSettings = {
@@ -1775,6 +1775,8 @@
       const newSettings = { startupBehavior: selected, remoteUrl: remoteUrl, fmlistOmid: fmlistOmid, showToAllUsers: showToAllUsers };
       
       try {
+          console.log(`[${pluginName}] Sending POST request to /plugins/LoggedStations/settings`);
+          console.log(`[${pluginName}] Data payload:`, newSettings);
           const res = await fetch('/plugins/LoggedStations/settings', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1788,10 +1790,12 @@
               localStorage.setItem("LoggedStationsShowToAll", showToAllUsers);
               sendToast('success', pluginName, "Startup settings saved on server!");
               popup.remove();
-          } else { 
+          } else {
+              console.error(`[${pluginName}] Server responded with error ${res.status}: ${res.statusText}`);
               throw new Error(`Server returned status ${res.status} (${res.statusText})`); 
           }
       } catch (e) {
+          console.error(`[${pluginName}] Failed to save settings:`, e);
           const errorDetail = e.message || "Unknown error";
           const errorMessage = `Error saving settings to server: ${errorDetail}\n\n` +
                                `Common causes:\n` +

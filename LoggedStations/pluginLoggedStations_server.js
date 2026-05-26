@@ -1,5 +1,5 @@
 /*
-    LoggedStations v. 0.0.3d
+    LoggedStations v. 0.0.3e
 */
 
 'use strict';
@@ -9,10 +9,20 @@ const path = require('path');
 const express = require('express');
 const https = require('https');
 
-const rootDir = process.cwd();
+// Risale di 2 livelli per raggiungere la root del server: plugins/LoggedStations/ -> plugins/ -> root/
+// Nota: Se il file si trova in una sottocartella ulteriore, regolare il numero di '..'
+const rootDir = path.resolve(__dirname, '..', '..');
+
+// Log di debug immediati (usiamo console.log perché logInfo non è ancora stato caricato)
+console.log(`[LoggedStations] Initializing backend. __dirname: ${__dirname}`);
+console.log(`[LoggedStations] Calculated rootDir: ${rootDir}`);
+console.log(`[LoggedStations] Attempting to load console from: ${path.join(rootDir, 'server', 'console')}`);
+
+const pluginName = "LoggedStations";
+const { logInfo, logError } = require(path.join(rootDir, 'server', 'console'));
+
 const config = require(path.join(rootDir, 'config.json'));
 const endpointsRouter = require(path.join(rootDir, 'server', 'endpoints'));
-const { logInfo, logError } = require(path.join(rootDir, 'server', 'console'));
 
 // TextDecoder helper: use global if available, otherwise try util.TextDecoder
 let TextDecoderImpl = global.TextDecoder;
@@ -25,11 +35,12 @@ try {
     TextDecoderImpl = TextDecoderImpl || null;
 }
 
-const pluginName = "LoggedStations";
-
 const csvDirectory = path.join(__dirname, 'files');
 const uploadedStorePath = path.join(__dirname, 'uploadedFiles.json');
 const settingsPath = path.join(rootDir, 'plugins_configs', 'LoggedStations.json');
+
+// Log settings path
+logInfo(`[${pluginName}] Settings file path: ${settingsPath}`);
 
 // Assicurati che le directory necessarie esistano all'avvio
 try {
@@ -82,11 +93,13 @@ function loadSettings() {
 // Settings endpoints
 // ==============================
 endpointsRouter.get('/plugins/LoggedStations/settings', (req, res) => {
+    logInfo(`[${pluginName}] GET /settings requested`);
     res.json(loadSettings());
 });
 
 endpointsRouter.post('/plugins/LoggedStations/settings', express.json(), (req, res) => {
     try {
+        logInfo(`[${pluginName}] POST /settings received`);
         const settings = req.body;
         if (!fs.existsSync(path.dirname(settingsPath))) {
             fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
