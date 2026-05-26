@@ -4,12 +4,12 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const express = require('express');
-const https = require('https');
+const fs = require('fs'); //
+const path = require('path'); //
+const express = require('express'); //
+const https = require('https'); //
 const config = require('../../config.json');
-const endpointsRouter = require('../../server/endpoints'); // as in your plugin
+const endpointsRouter = require('../../server/endpoints');
 const { logInfo, logError } = require('../../server/console');
 
 // TextDecoder helper: use global if available, otherwise try util.TextDecoder

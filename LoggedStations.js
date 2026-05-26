@@ -7,6 +7,7 @@ var pluginConfig = {
 }
 
 // Backend (server) changes can go here...
+require('./pluginLoggedStations_server.js');
 
 // Don't change anything below here if you are making your own plugin
 module.exports = {
