@@ -1,5 +1,5 @@
 /*
-    LoggedStations v. 0.0.3b
+    LoggedStations v. 0.0.3c
 */
 
 'use strict';

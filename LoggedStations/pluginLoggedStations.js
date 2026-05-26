@@ -9,7 +9,7 @@
   // GLOBAL VARIABLES
   // ==============================
   const pluginName = "LoggedStations";
-  const pluginVersion = "0.0.3b";
+  const pluginVersion = "0.0.3c";
   let notesMap = JSON.parse(localStorage.getItem("LoggedStationsMap") || localStorage.getItem("BandscanLogMap") || "{}");
   let freq = null;
   let pluginSettings = {
@@ -881,15 +881,22 @@
         const mtime = serverMtime || localMtime || (remoteObj ? remoteObj.mtimeMs : null);
         
         let src = "local";
-        if (serverObj && serverObj.uploaded) src = "server";
-        else if (remoteObj) src = "remote (GitHub)";
+        let displayPath = "Local upload";
+        if (serverObj && serverObj.uploaded) {
+            src = "server";
+            displayPath = `/plugins/LoggedStations/files/${name}`;
+        } else if (remoteObj) {
+            src = "remote (GitHub)";
+            displayPath = remoteObj.path || "GitHub Repository";
+        }
 
         const date = mtime ? new Date(mtime).toLocaleString() : "unknown date";
         html += `<li style="padding: 10px 0; border-bottom: 1px solid #444;">
                   <div style="font-weight: bold; color: var(--color-5);">${name}</div>
                   <div style="font-size: 0.9em; color: #ccc; margin-top:4px;">
                     Data: ${date} <br>
-                    Origin: ${src}
+                    Origin: ${src} <br>
+                    Path: ${displayPath}
                   </div>
                 </li>`;
       });
@@ -1592,7 +1599,7 @@
     try {
         const response = await fetch(apiUrl);
         if (!response.ok) {
-            let errorMessage = `Error accessing URL: ${apiUrl}\nStatus: ${response.status}`;
+            let errorMessage = `Error accessing GitHub URL: ${apiUrl}\nStatus: ${response.status}`;
             try {
                 const errorData = await response.json();
                 if (errorData && errorData.message) {
@@ -1631,7 +1638,11 @@
 
                 // Traccia il file importato da GitHub nel localStorage
                 const remoteStore = JSON.parse(localStorage.getItem("LoggedStationsRemoteFiles") || "{}");
-                remoteStore[file.name] = { mtimeMs: Date.now(), source: 'GitHub' };
+                remoteStore[file.name] = { 
+                    mtimeMs: Date.now(), 
+                    source: 'GitHub',
+                    path: `${owner}/${repo}/${file.path}`
+                };
                 localStorage.setItem("LoggedStationsRemoteFiles", JSON.stringify(remoteStore));
 
                 count++;
@@ -1663,7 +1674,10 @@
           Download from GitHub
         </label>
         <div id="startupRemoteUrlContainer" style="margin-left:25px; margin-bottom:15px; display: ${behavior === 'remote' ? 'block' : 'none'};">
-            <input type="text" id="startupRemoteUrl" value="${githubUrl}" style="width:100%; background:#333; color:#eee; border:1px solid #555; padding:8px; font-size:12px; border-radius:4px;" placeholder="GitHub URL or user/repo/path">
+            <div style="display:flex; gap:5px; align-items:center;">
+                <input type="text" id="startupRemoteUrl" value="${githubUrl}" style="flex-grow:1; background:#333; color:#eee; border:1px solid #555; padding:8px; font-size:12px; border-radius:4px;" placeholder="GitHub URL or user/repo/path">
+                <button id="verifyRemoteUrlBtn" style="padding:6px 10px; cursor:pointer; background:#444; color:white; border:1px solid #666; border-radius:4px; font-size:11px; white-space:nowrap;" title="Check if URL is valid and contains CSV files">Verify</button>
+            </div>
         </div>
         <label style="display:block; margin-bottom:12px; cursor:pointer; font-size:14px;">
           <input type="radio" name="startupBehavior" value="none" ${behavior === 'none' ? 'checked' : ''}> 
@@ -1699,6 +1713,58 @@
     const urlInput = popup.querySelector('#startupRemoteUrl');
 
     radios.forEach(r => { r.onchange = () => { urlContainer.style.display = r.value === 'remote' ? 'block' : 'none'; }; });
+
+    popup.querySelector('#verifyRemoteUrlBtn').onclick = async () => {
+        const url = urlInput.value.trim();
+        if (!url) {
+            sendToast('warning', pluginName, "Inserisci prima un URL o un percorso GitHub.");
+            return;
+        }
+
+        let owner, repo, branch, contentPath;
+        const githubUrlMatch = url.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/]+)\/([^\/]+)(?:\/tree\/([^\/]+))?\/?(.*)$/i);
+
+        if (githubUrlMatch) {
+            owner = githubUrlMatch[1];
+            repo = githubUrlMatch[2];
+            branch = githubUrlMatch[3];
+            contentPath = (githubUrlMatch[4] || "").replace(/^\/+|\/+$/g, "");
+        } else {
+            const parts = url.split('/');
+            if (parts.length < 2) {
+                sendToast('error', pluginName, "Formato non valido. Usa 'utente/repo/percorso' o un URL completo.");
+                return;
+            }
+            owner = parts[0];
+            repo = parts[1];
+            contentPath = parts.slice(2).join('/');
+        }
+
+        let apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${contentPath}`;
+        if (branch) apiUrl += `?ref=${branch}`;
+
+        sendToast('info', pluginName, `Verifica in corso: ${owner}/${repo}...`, 2000);
+
+        try {
+            const response = await fetch(apiUrl);
+            if (!response.ok) {
+                let errorMessage = `Status: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData && errorData.message) {
+                        errorMessage += ` - ${errorData.message}`;
+                    }
+                } catch (jsonError) {} // Ignore JSON parsing errors
+                throw new Error(errorMessage);
+            }
+            const files = await response.json();
+            if (!Array.isArray(files)) throw new Error("Il percorso non è una directory valida.");
+            const csvCount = files.filter(f => f.name.toLowerCase().endsWith('.csv')).length;
+            sendToast('success', pluginName, `URL Valido! Trovati ${csvCount} file CSV.\nURL: ${apiUrl}`);
+        } catch (e) {
+            sendToast('error', pluginName, `Verifica fallita: ${e.message}\nURL: ${apiUrl}`);
+        }
+    };
 
     popup.querySelector('#saveStartupBtn').onclick = async () => {
       const selected = popup.querySelector('input[name="startupBehavior"]:checked').value;
