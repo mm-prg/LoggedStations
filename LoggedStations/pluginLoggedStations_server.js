@@ -8,9 +8,12 @@ const fs = require('fs'); //
 const path = require('path'); //
 const express = require('express'); //
 const https = require('https'); //
-const config = require('../../config.json');
-const endpointsRouter = require('../../server/endpoints');
-const { logInfo, logError } = require('../../server/console');
+
+// Utilizzo di process.cwd() per garantire che i percorsi siano corretti sia in locale che online
+const rootDir = process.cwd();
+const config = require(path.join(rootDir, 'config.json'));
+const endpointsRouter = require(path.join(rootDir, 'server', 'endpoints'));
+const { logInfo, logError } = require(path.join(rootDir, 'server', 'console'));
 
 // TextDecoder helper: use global if available, otherwise try util.TextDecoder
 let TextDecoderImpl = global.TextDecoder;
@@ -27,7 +30,7 @@ const pluginName = "LoggedStations";
 
 const csvDirectory = path.join(__dirname, 'files');
 const uploadedStorePath = path.join(__dirname, 'uploadedFiles.json');
-const settingsPath = path.join(__dirname, '../../plugins_configs/LoggedStations.json');
+const settingsPath = path.join(rootDir, 'plugins_configs', 'LoggedStations.json');
 
 function loadUploadedStore() {
     try {
