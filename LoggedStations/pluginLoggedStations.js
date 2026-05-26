@@ -9,7 +9,7 @@
   // GLOBAL VARIABLES
   // ==============================
   const pluginName = "LoggedStations";
-  const pluginVersion = "0.0.3a";
+  const pluginVersion = "0.0.3b";
   let notesMap = JSON.parse(localStorage.getItem("LoggedStationsMap") || localStorage.getItem("BandscanLogMap") || "{}");
   let freq = null;
   let pluginSettings = {
@@ -1539,13 +1539,13 @@
   }
 
   async function importFromGitHub(forcedUrl = null, isAutoStartup = false) {
-    const defaultRepoPath = "https://github.com/mm-prg/TefData/tree/main/LoggedStations";
+    const defaultRepoPath = ""; 
     let fullRepoPathInput;
 
     if (forcedUrl) {
         fullRepoPathInput = forcedUrl;
     } else {
-        fullRepoPathInput = prompt("Inserisci il percorso del repository GitHub (es. 'utente/repo/path/to/folder' o URL completo):", localStorage.getItem("LoggedStationsRemoteUrl") || defaultRepoPath);
+        fullRepoPathInput = prompt("Inserisci il percorso del repository GitHub (es. 'utente/repo/path/to/folder' o URL completo):", localStorage.getItem("LoggedStationsRemoteUrl") || "");
     }
 
     if (!fullRepoPathInput) {
@@ -1565,7 +1565,7 @@
         owner = githubUrlMatch[1];
         repo = githubUrlMatch[2];
         branch = githubUrlMatch[3];
-        contentPath = githubUrlMatch[4].replace(/\/+$/, ""); // Rimuove eventuali slash finali per pulizia
+        contentPath = (githubUrlMatch[4] || "").replace(/^\/+|\/+$/g, ""); // Pulisce slash iniziali e finali
     } else {
         // Altrimenti, assume il formato 'owner/repo/path/to/folder'
         const parts = fullRepoPathInput.split('/');
@@ -1586,12 +1586,13 @@
     let apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${contentPath}`;
     if (branch) apiUrl += `?ref=${branch}`;
 
-    console.log(`[${pluginName}] Fetching file list from GitHub: ${apiUrl}`);
+    const checkMsg = `Checking GitHub: ${owner}/${repo}/${contentPath}${branch ? ' [' + branch + ']' : ''}`;
+    sendToast('info', pluginName, checkMsg, 3000);
 
     try {
         const response = await fetch(apiUrl);
         if (!response.ok) {
-            let errorMessage = `Could not fetch file list from GitHub. Status: ${response.status}`;
+            let errorMessage = `Error accessing URL: ${apiUrl}\nStatus: ${response.status}`;
             try {
                 const errorData = await response.json();
                 if (errorData && errorData.message) {
@@ -1604,6 +1605,11 @@
         }
         
         const files = await response.json();
+        
+        if (!Array.isArray(files)) {
+            throw new Error("Il percorso fornito non sembra essere una directory valida su GitHub.");
+        }
+
         const csvFiles = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
 
         if (csvFiles.length === 0) {
@@ -1630,7 +1636,7 @@
 
                 count++;
             } catch (e) {
-                console.error(`Error importing ${file.name}:`, e);
+                sendToast('error', pluginName, `Error downloading file: ${file.name}\nURL: ${file.download_url}`);
             }
         }
         isServerImport = false;

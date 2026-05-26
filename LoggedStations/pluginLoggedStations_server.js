@@ -1,15 +1,14 @@
 /*
-    LoggedStations v. 0.0.3a
+    LoggedStations v. 0.0.3b
 */
 
 'use strict';
 
-const fs = require('fs'); //
-const path = require('path'); //
-const express = require('express'); //
-const https = require('https'); //
+const fs = require('fs');
+const path = require('path');
+const express = require('express');
+const https = require('https');
 
-// Utilizzo di process.cwd() per garantire che i percorsi siano corretti sia in locale che online
 const rootDir = process.cwd();
 const config = require(path.join(rootDir, 'config.json'));
 const endpointsRouter = require(path.join(rootDir, 'server', 'endpoints'));
@@ -31,6 +30,16 @@ const pluginName = "LoggedStations";
 const csvDirectory = path.join(__dirname, 'files');
 const uploadedStorePath = path.join(__dirname, 'uploadedFiles.json');
 const settingsPath = path.join(rootDir, 'plugins_configs', 'LoggedStations.json');
+
+// Assicurati che le directory necessarie esistano all'avvio
+try {
+    if (!fs.existsSync(csvDirectory)) {
+        fs.mkdirSync(csvDirectory, { recursive: true });
+        logInfo(`[${pluginName}] Created missing 'files' directory.`);
+    }
+} catch (e) {
+    logError(`[${pluginName}] Error creating directories:`, e);
+}
 
 function loadUploadedStore() {
     try {
